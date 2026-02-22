@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+target/
+
+# Environment
+.env
+.env.local
+
+# IDE
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Rust
+hypivisor/target/
+
+# Vite
+pi-de/dist/
+
+# TypeScript
+pi-socket/dist/
+*.tsbuildinfo

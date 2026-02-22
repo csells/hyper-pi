@@ -1,0 +1,593 @@
+/* ── Design Tokens ──────────────────────────────────────────── */
+:root {
+  --bg-dark: #090a0f;
+  --bg-panel: #111318;
+  --bg-panel-hover: #1a1d24;
+  --text-main: #e2e8f0;
+  --text-muted: #64748b;
+  --accent: #10b981;
+  --accent-glow: rgba(16, 185, 129, 0.4);
+  --border-color: #1e222b;
+  --danger: #ef4444;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: "Inter", -apple-system, sans-serif;
+  background-color: var(--bg-dark);
+  color: var(--text-main);
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* ── 3-Pane IDE Grid ───────────────────────────────────────── */
+.pi-de-layout {
+  display: grid;
+  grid-template-columns: 280px 1fr 280px;
+  height: 100vh;
+  width: 100vw;
+}
+
+.pi-de-layout.no-inspector {
+  grid-template-columns: 280px 1fr;
+}
+
+/* ── Panels (shared) ───────────────────────────────────────── */
+.sidebar {
+  background-color: var(--bg-panel);
+  display: flex;
+  flex-direction: column;
+}
+
+.roster-pane {
+  border-right: 1px solid var(--border-color);
+}
+
+.inspector-pane {
+  border-left: 1px solid var(--border-color);
+}
+
+.sidebar h2 {
+  font-size: 0.75rem;
+  font-family: "Fira Code", monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  padding: 1.5rem 1rem;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.empty {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  font-style: italic;
+  text-align: center;
+  margin-top: 2rem;
+}
+
+/* ── Hypivisor Status Banner ───────────────────────────────── */
+.hv-status-banner {
+  padding: 0.6rem 1rem;
+  font-size: 0.75rem;
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--danger);
+  border-bottom: 1px solid var(--border-color);
+}
+
+/* ── Roster: Node Cards ────────────────────────────────────── */
+.node-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.node-card {
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: 0.8rem;
+  text-align: left;
+  color: var(--text-main);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.node-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+.node-card:hover:not(.offline) {
+  background: var(--bg-panel-hover);
+  border-color: var(--text-muted);
+}
+
+.node-card.active {
+  background: var(--bg-panel-hover);
+  border-color: var(--accent);
+  box-shadow: 0 0 10px var(--accent-glow);
+}
+
+.node-card.offline {
+  opacity: 0.4;
+  border-style: dashed;
+  cursor: not-allowed;
+}
+
+.node-card.offline:hover {
+  border-color: var(--border-color);
+}
+
+.node-card strong {
+  font-size: 0.9rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.metadata {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  font-family: "Fira Code", monospace;
+}
+
+.metadata.cwd {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Status Dots ───────────────────────────────────────────── */
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition: all 0.3s ease;
+}
+
+.status-dot.active {
+  background-color: var(--accent);
+  box-shadow: 0 0 8px var(--accent-glow);
+}
+
+.status-dot.offline {
+  background-color: #475569;
+  box-shadow: none;
+}
+
+/* ── Spawn Button ──────────────────────────────────────────── */
+.btn-spawn {
+  margin: 1rem;
+  padding: 0.7rem;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--accent);
+  cursor: pointer;
+  font-family: "Fira Code", monospace;
+  font-size: 0.8rem;
+  transition: all 0.2s ease;
+}
+
+.btn-spawn:hover:not(:disabled) {
+  background: var(--bg-panel-hover);
+  border-color: var(--accent);
+}
+
+.btn-spawn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* ── Main Stage (Center) ───────────────────────────────────── */
+.main-stage {
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bg-dark);
+  height: 100%;
+}
+
+.stage-header {
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid var(--border-color);
+  background-color: var(--bg-panel);
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.stage-header h3 {
+  font-size: 0.85rem;
+  font-family: "Fira Code", monospace;
+  color: var(--accent);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-status {
+  font-size: 0.75rem;
+  color: var(--danger);
+  font-family: "Fira Code", monospace;
+}
+
+.truncation-notice {
+  padding: 0.5rem 1.5rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.empty-stage {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  gap: 0.5rem;
+}
+
+.empty-stage h1 {
+  font-size: 1.2rem;
+  color: var(--text-main);
+}
+
+/* ── Chat Area ─────────────────────────────────────────────── */
+.chat-area {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.chat-msg {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.msg-label {
+  font-size: 0.65rem;
+  font-family: "Fira Code", monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.msg-content {
+  font-size: 0.9rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.chat-user .msg-content {
+  color: var(--accent);
+}
+
+.chat-assistant .msg-content {
+  color: var(--text-main);
+}
+
+.chat-system .msg-content {
+  font-size: 0.8rem;
+  font-family: "Fira Code", monospace;
+  color: var(--text-muted);
+}
+
+/* ── Input Bar ─────────────────────────────────────────────── */
+.input-bar {
+  display: flex;
+  gap: 0.5rem;
+  padding: 1rem 1.5rem;
+  border-top: 1px solid var(--border-color);
+  background-color: var(--bg-panel);
+}
+
+.input-bar input {
+  flex: 1;
+  padding: 0.7rem 1rem;
+  background: var(--bg-dark);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-main);
+  font-size: 0.9rem;
+  font-family: "Inter", sans-serif;
+  outline: none;
+  min-height: 44px;
+}
+
+.input-bar input:focus {
+  border-color: var(--accent);
+}
+
+.input-bar input:disabled {
+  opacity: 0.3;
+}
+
+.input-bar button {
+  padding: 0.7rem 1.2rem;
+  background: var(--accent);
+  border: none;
+  border-radius: 4px;
+  color: var(--bg-dark);
+  font-weight: 600;
+  cursor: pointer;
+  min-height: 44px;
+  min-width: 44px;
+}
+
+.input-bar button:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* ── Inspector: Tools ──────────────────────────────────────── */
+.tool-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+
+.tool-card {
+  background: var(--bg-dark);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: 0.8rem;
+}
+
+.tool-card strong {
+  display: block;
+  font-size: 0.8rem;
+  font-family: "Fira Code", monospace;
+  color: var(--accent);
+  margin-bottom: 0.3rem;
+}
+
+.tool-card p {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+/* ── Spawn Modal ───────────────────────────────────────────── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+
+.modal-content {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 2rem;
+  width: 90%;
+  max-width: 500px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.modal-content h2 {
+  font-size: 1rem;
+  border: none;
+  padding: 0;
+  color: var(--text-main);
+}
+
+.file-browser {
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.browser-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-dark);
+}
+
+.btn-up {
+  padding: 0.3rem 0.6rem;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+  color: var(--text-main);
+  cursor: pointer;
+  font-size: 0.75rem;
+  min-height: 44px;
+  min-width: 44px;
+}
+
+.current-path {
+  font-size: 0.75rem;
+  font-family: "Fira Code", monospace;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dir-list {
+  list-style: none;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.dir-item {
+  padding: 0.5rem 0.8rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background 0.1s;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+}
+
+.dir-item:hover {
+  background: var(--bg-panel-hover);
+}
+
+.dir-item.empty {
+  color: var(--text-muted);
+  font-style: italic;
+  cursor: default;
+}
+
+.spawn-error {
+  padding: 0.5rem;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid var(--danger);
+  border-radius: 4px;
+  color: var(--danger);
+  font-size: 0.8rem;
+}
+
+.spawn-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.spawn-controls input {
+  padding: 0.7rem 1rem;
+  background: var(--bg-dark);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-main);
+  font-size: 0.85rem;
+  outline: none;
+  min-height: 44px;
+}
+
+.spawn-controls input:focus {
+  border-color: var(--accent);
+}
+
+.button-group {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+.btn-cancel {
+  padding: 0.6rem 1.2rem;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-muted);
+  cursor: pointer;
+  min-height: 44px;
+}
+
+.btn-deploy {
+  padding: 0.6rem 1.2rem;
+  background: var(--accent);
+  border: none;
+  border-radius: 4px;
+  color: var(--bg-dark);
+  font-weight: 600;
+  cursor: pointer;
+  min-height: 44px;
+}
+
+.btn-deploy:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.btn-inspector-toggle {
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-main);
+  padding: 0.4rem 0.6rem;
+  cursor: pointer;
+  min-height: 44px;
+  min-width: 44px;
+}
+
+/* ── Mobile (<768px) ───────────────────────────────────────── */
+@media (max-width: 767px) {
+  .pi-de-layout {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .pi-de-layout.no-inspector {
+    grid-template-columns: unset;
+  }
+
+  .roster-pane {
+    display: block;
+    height: 100vh;
+    border-right: none;
+  }
+
+  .main-stage {
+    display: none;
+  }
+
+  .inspector-pane {
+    display: none;
+  }
+
+  /* When an agent is selected, swap to chat view */
+  .pi-de-layout.agent-selected .roster-pane {
+    display: none;
+  }
+
+  .pi-de-layout.agent-selected .main-stage {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+  }
+
+  /* Inspector as slide-out drawer */
+  .inspector-drawer {
+    position: fixed;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 280px;
+    z-index: 100;
+    transform: translateX(100%);
+    transition: transform 0.2s;
+    border-left: 1px solid var(--border-color);
+  }
+
+  .inspector-drawer.open {
+    transform: translateX(0);
+  }
+}
