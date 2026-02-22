@@ -64,6 +64,8 @@ export function buildInitState(
           const b = block as Record<string, unknown>;
           if (b.type === "text" && typeof b.text === "string") {
             allEvents.push({ type: "delta", text: b.text });
+          } else if (b.type === "thinking" && typeof b.thinking === "string") {
+            allEvents.push({ type: "thinking_delta", text: b.thinking });
           } else if (b.type === "tool_use" && typeof b.name === "string") {
             allEvents.push({ type: "tool_start", name: b.name, args: b.input });
           }

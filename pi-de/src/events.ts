@@ -24,6 +24,11 @@ export function applyEvent(chat: ChatMessage[], event: AgentEvent | HistoryEvent
       }
       break;
 
+    case "thinking_delta":
+      // Thinking events are rendered by pi-web-ui's ThinkingBlock component;
+      // in the legacy ChatMessage model we skip them.
+      break;
+
     case "tool_start":
       result.push({ role: "system", content: `⏳ Running \`${event.name}\`…` });
       break;

@@ -31,6 +31,7 @@ export type AgentStatus = "connecting" | "connected" | "disconnected" | "offline
 export type AgentEvent =
   | InitStateEvent
   | DeltaEvent
+  | ThinkingDeltaEvent
   | ToolStartEvent
   | ToolEndEvent
   | MessageStartEvent
@@ -46,6 +47,11 @@ export interface InitStateEvent {
 
 export interface DeltaEvent {
   type: "delta";
+  text: string;
+}
+
+export interface ThinkingDeltaEvent {
+  type: "thinking_delta";
   text: string;
 }
 
@@ -75,6 +81,7 @@ export interface MessageEndEvent {
 export type HistoryEvent =
   | { type: "user_message"; text: string }
   | DeltaEvent
+  | ThinkingDeltaEvent
   | ToolStartEvent
   | ToolEndEvent;
 

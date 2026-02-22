@@ -13,6 +13,12 @@ import "./patchLit";
 // Import pi-web-ui components (registers <agent-interface> custom element)
 import "@mariozechner/pi-web-ui/app.css";
 import "@mariozechner/pi-web-ui";
+
+// Register mini-lit custom elements used by pi-web-ui message rendering.
+// pi-web-ui's Messages.ts uses <markdown-block> and <code-block> but
+// doesn't import them — the consuming app must ensure they're registered.
+import "@mariozechner/mini-lit/dist/MarkdownBlock.js";
+import "@mariozechner/mini-lit/dist/CodeBlock.js";
 import { initPiDeStorage } from "./initStorage";
 
 // Initialize minimal AppStorage so AgentInterface.sendMessage() can proceed.

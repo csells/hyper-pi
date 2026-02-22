@@ -2,6 +2,7 @@
 export type AgentEvent =
   | { type: "init_state"; events: HistoryEvent[]; tools: ToolInfo[]; truncated?: boolean; totalEvents?: number }
   | { type: "delta"; text: string }
+  | { type: "thinking_delta"; text: string }
   | { type: "tool_start"; name: string; args: unknown }
   | { type: "tool_end"; name: string; isError: boolean }
   | { type: "message_start"; role: string }
@@ -11,6 +12,7 @@ export type AgentEvent =
 export type HistoryEvent =
   | { type: "user_message"; text: string }
   | { type: "delta"; text: string }
+  | { type: "thinking_delta"; text: string }
   | { type: "tool_start"; name: string; args: unknown }
   | { type: "tool_end"; name: string; isError: boolean };
 

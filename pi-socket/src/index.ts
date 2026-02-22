@@ -93,6 +93,8 @@ export default function piSocket(pi: ExtensionAPI) {
   pi.on("message_update", (event) => {
     if (event.assistantMessageEvent?.type === "text_delta") {
       broadcast({ type: "delta", text: event.assistantMessageEvent.delta });
+    } else if (event.assistantMessageEvent?.type === "thinking_delta") {
+      broadcast({ type: "thinking_delta", text: event.assistantMessageEvent.delta });
     }
   });
 

@@ -21,6 +21,7 @@ import type {
   Model,
   Api,
   TextContent,
+  ThinkingContent,
   ToolCall,
   ToolResultMessage,
   UserMessage,
@@ -183,6 +184,9 @@ export class RemoteAgent {
       case "delta":
         this.handleDelta(event.text);
         break;
+      case "thinking_delta":
+        this.handleThinkingDelta(event.text);
+        break;
       case "tool_start":
         this.handleToolStart(event.name, event.args);
         break;
@@ -241,6 +245,37 @@ export class RemoteAgent {
 
     const event: AssistantMessageEvent = {
       type: "text_delta",
+      contentIndex: content.length - 1,
+      delta: text,
+      partial: this.streamingMessage,
+    };
+    this.emit({
+      type: "message_update",
+      message: this.streamingMessage,
+      assistantMessageEvent: event,
+    });
+  }
+
+  private handleThinkingDelta(text: string): void {
+    if (!this.streamingMessage) {
+      this._state = { ...this._state, isStreaming: true };
+      this.streamingMessage = makeEmptyAssistant();
+      this.emit({ type: "agent_start" });
+      this.emit({ type: "turn_start" });
+      this.emit({ type: "message_start", message: this.streamingMessage });
+    }
+
+    // Append to the last thinking block, or create one
+    const content = this.streamingMessage.content;
+    const lastBlock = content[content.length - 1];
+    if (lastBlock && lastBlock.type === "thinking") {
+      (lastBlock as ThinkingContent).thinking += text;
+    } else {
+      content.push({ type: "thinking", thinking: text });
+    }
+
+    const event: AssistantMessageEvent = {
+      type: "thinking_delta",
       contentIndex: content.length - 1,
       delta: text,
       partial: this.streamingMessage,
@@ -420,6 +455,21 @@ function rebuildMessages(events: HistoryEvent[]): AgentMessage[] {
             (last as TextContent).text += ev.text;
           } else {
             content.push({ type: "text", text: ev.text });
+          }
+        }
+        break;
+
+      case "thinking_delta":
+        if (!currentAssistant) {
+          currentAssistant = makeEmptyAssistant();
+        }
+        {
+          const content = currentAssistant.content;
+          const last = content[content.length - 1];
+          if (last && last.type === "thinking") {
+            (last as ThinkingContent).thinking += ev.text;
+          } else {
+            content.push({ type: "thinking", thinking: ev.text });
           }
         }
         break;
