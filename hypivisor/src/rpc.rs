@@ -1,5 +1,6 @@
 use crate::state::{NodeInfo, Registry};
 use crate::{fs_browser, spawn};
+use asupersync::Cx;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::path::PathBuf;
@@ -23,10 +24,10 @@ pub struct RpcResponse {
 }
 
 /// Dispatch an RPC request to the appropriate handler.
-pub fn dispatch(req: RpcRequest, state: &Registry) -> RpcResponse {
+pub fn dispatch(cx: &Cx, req: RpcRequest, state: &Registry) -> RpcResponse {
     let id = req.id.clone();
     match req.method.as_str() {
-        "register" => handle_register(id, req.params, state),
+        "register" => handle_register(cx, id, req.params, state),
         "list_nodes" => handle_list_nodes(id, state),
         "list_directories" => handle_list_directories(id, req.params, state),
         "spawn_agent" => handle_spawn_agent(id, req.params, state),
@@ -42,7 +43,12 @@ pub fn dispatch(req: RpcRequest, state: &Registry) -> RpcResponse {
     }
 }
 
-fn handle_register(id: Option<String>, params: Option<Value>, state: &Registry) -> RpcResponse {
+fn handle_register(
+    cx: &Cx,
+    id: Option<String>,
+    params: Option<Value>,
+    state: &Registry,
+) -> RpcResponse {
     let Some(params) = params else {
         return RpcResponse {
             id,
@@ -68,7 +74,7 @@ fn handle_register(id: Option<String>, params: Option<Value>, state: &Registry) 
     }
     info!(node_id = %node.id, port = node.port, "Node joined");
     let event = serde_json::json!({ "event": "node_joined", "node": node }).to_string();
-    let _ = state.tx.send(event);
+    let _ = state.tx.send(cx, event);
     RpcResponse {
         id,
         result: Some(serde_json::json!({ "status": "registered" })),
@@ -164,14 +170,14 @@ fn handle_ping(id: Option<String>, state: &Registry) -> RpcResponse {
 mod tests {
     use super::*;
     use crate::state::AppState;
+    use asupersync::channel::broadcast;
     use std::{
         collections::HashMap,
         sync::{Arc, RwLock},
     };
-    use tokio::sync::broadcast;
 
     fn make_registry() -> Registry {
-        let (tx, _) = broadcast::channel(16);
+        let (tx, _) = broadcast::channel::<String>(16);
         Arc::new(AppState {
             nodes: RwLock::new(HashMap::new()),
             tx,
@@ -183,6 +189,7 @@ mod tests {
 
     #[test]
     fn register_adds_node() {
+        let cx = crate::ephemeral_cx();
         let reg = make_registry();
         let req = RpcRequest {
             id: Some("1".into()),
@@ -192,15 +199,15 @@ mod tests {
                 "port": 8080, "status": "active"
             })),
         };
-        let resp = dispatch(req, &reg);
+        let resp = dispatch(&cx, req, &reg);
         assert!(resp.error.is_none());
         assert!(reg.nodes.read().unwrap().contains_key("test-node"));
     }
 
     #[test]
     fn list_nodes_returns_registered() {
+        let cx = crate::ephemeral_cx();
         let reg = make_registry();
-        // Register a node first
         let req = RpcRequest {
             id: Some("1".into()),
             method: "register".into(),
@@ -208,14 +215,14 @@ mod tests {
                 "id": "n1", "machine": "h", "cwd": "/tmp", "port": 80, "status": "active"
             })),
         };
-        dispatch(req, &reg);
+        dispatch(&cx, req, &reg);
 
         let req = RpcRequest {
             id: Some("2".into()),
             method: "list_nodes".into(),
             params: None,
         };
-        let resp = dispatch(req, &reg);
+        let resp = dispatch(&cx, req, &reg);
         let nodes: Vec<NodeInfo> = serde_json::from_value(resp.result.unwrap()).unwrap();
         assert_eq!(nodes.len(), 1);
         assert_eq!(nodes[0].id, "n1");
@@ -223,13 +230,14 @@ mod tests {
 
     #[test]
     fn unknown_method_returns_error() {
+        let cx = crate::ephemeral_cx();
         let reg = make_registry();
         let req = RpcRequest {
             id: Some("1".into()),
             method: "bogus".into(),
             params: None,
         };
-        let resp = dispatch(req, &reg);
+        let resp = dispatch(&cx, req, &reg);
         assert!(resp.error.is_some());
         assert!(resp.error.unwrap().contains("Method not found"));
     }

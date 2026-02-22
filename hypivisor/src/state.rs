@@ -1,10 +1,10 @@
+use asupersync::channel::broadcast;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     path::PathBuf,
     sync::{Arc, RwLock},
 };
-use tokio::sync::broadcast;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct NodeInfo {

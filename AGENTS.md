@@ -14,6 +14,10 @@ Decentralized control plane for pi coding agents: a WebSocket extension (pi-sock
 
 pi itself is never modified. Everything is additive — a global extension, an external daemon, and an external web app.
 
+## Read Before Assuming
+
+When you encounter a reference to a file, spec, API, config, or convention — **read it** before concluding it doesn't exist or works differently than described. This includes specs/, component AGENTS.md files, package.json files, and any path mentioned in docs. If a file isn't where you expect, use `find` or `ls` to locate it.
+
 ## Specs
 
 All design decisions, requirements, and architecture are in `specs/`:

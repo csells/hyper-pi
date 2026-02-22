@@ -1,0 +1,15 @@
+{
+  "name": "hyper-pi-integration-tests",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Cross-component integration tests for Hyper-Pi",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "vitest": "^4.0.18",
+    "ws": "^8.18.0",
+    "@types/ws": "^8.5.0"
+  }
+}

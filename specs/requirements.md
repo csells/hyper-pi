@@ -119,7 +119,7 @@ The default hypivisor port (31415) is a reference to π (3.1415…).
 - **R-HV-30:** The hypivisor MUST be written in Rust.
 - **R-HV-31:** The hypivisor MUST use the `clap` crate for CLI argument parsing.
 - **R-HV-32:** The registry MUST be thread-safe (e.g., `Arc<RwLock<HashMap>>`).
-- **R-HV-33:** The broadcast channel MUST use `tokio::sync::broadcast`.
+- **R-HV-33:** The broadcast channel MUST use `asupersync::channel::broadcast`.
 
 ---
 

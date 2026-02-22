@@ -332,13 +332,13 @@ There is no conflict resolution. This matches the mental model of "multiple peop
 
 ### 2. Hypivisor
 
-**Language:** Rust (Axum + Tokio)
+**Language:** Rust (asupersync)
 
 **Default port:** 31415
 
 **Interface:** Single WebSocket endpoint at `/ws`
 
-**Crates:** `axum` (with `ws` feature), `tokio` (full), `serde`/`serde_json`, `clap` (derive), `chrono`
+**Crates:** `asupersync` (structured concurrency runtime with WebSocket, broadcast channels, cancel-correct Cx), `serde`/`serde_json`, `clap` (derive), `chrono`
 
 #### Reference Implementation
 
