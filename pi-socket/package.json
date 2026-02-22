@@ -32,5 +32,8 @@
   "files": [
     "dist"
   ],
-  "license": "MIT"
+  "license": "MIT",
+  "pi": {
+    "extensions": ["./src/index.ts"]
+  }
 }
