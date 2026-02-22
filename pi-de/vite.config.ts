@@ -54,6 +54,8 @@ export default defineConfig({
     include: [
       "@mariozechner/pi-ai > partial-json",
       "@mariozechner/pi-ai > p-retry",
+      "@mariozechner/pi-ai > ajv",
+      "@mariozechner/pi-ai > ajv-formats",
     ],
   },
 });
