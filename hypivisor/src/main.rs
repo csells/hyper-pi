@@ -82,7 +82,6 @@ fn main() {
         cleanup::cleanup_stale_nodes(&cx, &cleanup_state);
     });
 
-    // Use std::net::TcpListener for the accept loop (synchronous, simple)
     let addr = format!("0.0.0.0:{}", args.port);
     let listener = std::net::TcpListener::bind(&addr)
         .unwrap_or_else(|e| panic!("Failed to bind {addr}: {e}"));
@@ -98,7 +97,9 @@ fn main() {
             }
         };
 
-        let peer_addr = stream.peer_addr().unwrap_or_else(|_| "0.0.0.0:0".parse().unwrap());
+        let peer_addr = stream
+            .peer_addr()
+            .unwrap_or_else(|_| "0.0.0.0:0".parse().unwrap());
         let state = state.clone();
 
         std::thread::spawn(move || {
@@ -114,7 +115,6 @@ fn handle_connection(
 ) {
     use io::{Read, Write};
 
-    // Read the initial HTTP request bytes for WebSocket upgrade
     let mut buf = [0u8; 8192];
     let n = match stream.read(&mut buf) {
         Ok(n) if n > 0 => n,
@@ -126,32 +126,54 @@ fn handle_connection(
     };
     let request_bytes = &buf[..n];
 
-    // Parse enough of the HTTP request to check the path and auth
     let request_str = String::from_utf8_lossy(request_bytes);
     let first_line = request_str.lines().next().unwrap_or("");
     let uri = first_line.split_whitespace().nth(1).unwrap_or("/");
-
-    // Only accept /ws path
     let path = uri.split('?').next().unwrap_or("/");
-    if path != "/ws" {
-        let _ = stream.write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 9\r\n\r\nNot Found");
-        return;
-    }
 
-    // Auth check
+    // Auth check (applies to all WebSocket paths)
     let token = extract_token_from_query(uri);
     if !is_authorized(token.as_deref(), &state.secret_token) {
-        let _ = stream.write_all(b"HTTP/1.1 401 Unauthorized\r\nContent-Length: 12\r\n\r\nUnauthorized");
+        let _ = stream
+            .write_all(b"HTTP/1.1 401 Unauthorized\r\nContent-Length: 12\r\n\r\nUnauthorized");
         return;
     }
 
-    // WebSocket handshake using asupersync's protocol implementation
+    // Route: /ws = registry, /ws/agent/{nodeId} = proxy
+    if path == "/ws" {
+        if let Some(ws_stream) = upgrade_websocket(&mut stream, request_bytes, peer_addr) {
+            handle_registry_ws(ws_stream, peer_addr, state);
+        }
+    } else if let Some(node_id) = path.strip_prefix("/ws/agent/") {
+        if node_id.is_empty() {
+            let _ =
+                stream.write_all(b"HTTP/1.1 400 Bad Request\r\nContent-Length: 15\r\n\r\nMissing node ID");
+            return;
+        }
+        let node_id = node_id.to_string();
+        if let Some(ws_stream) = upgrade_websocket(&mut stream, request_bytes, peer_addr) {
+            handle_proxy_ws(ws_stream, peer_addr, &node_id, &state);
+        }
+    } else {
+        let _ = stream.write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 9\r\n\r\nNot Found");
+    }
+}
+
+/// Perform WebSocket upgrade handshake, returning the stream on success.
+fn upgrade_websocket(
+    stream: &mut StdTcpStream,
+    request_bytes: &[u8],
+    peer_addr: std::net::SocketAddr,
+) -> Option<StdTcpStream> {
+    use io::Write;
+
     let http_req = match HttpRequest::parse(request_bytes) {
         Ok(r) => r,
         Err(e) => {
             warn!(peer = %peer_addr, error = %e, "Invalid HTTP request for WS upgrade");
-            let _ = stream.write_all(b"HTTP/1.1 400 Bad Request\r\nContent-Length: 11\r\n\r\nBad Request");
-            return;
+            let _ = stream
+                .write_all(b"HTTP/1.1 400 Bad Request\r\nContent-Length: 11\r\n\r\nBad Request");
+            return None;
         }
     };
 
@@ -160,99 +182,129 @@ fn handle_connection(
         Ok(r) => r,
         Err(e) => {
             warn!(peer = %peer_addr, error = %e, "WebSocket handshake failed");
-            let _ = stream.write_all(b"HTTP/1.1 400 Bad Request\r\nContent-Length: 11\r\n\r\nBad Request");
-            return;
+            let _ = stream
+                .write_all(b"HTTP/1.1 400 Bad Request\r\nContent-Length: 11\r\n\r\nBad Request");
+            return None;
         }
     };
 
-    // Send 101 Switching Protocols response
     let response_bytes = accept_response.response_bytes();
     if stream.write_all(&response_bytes).is_err() {
-        return;
+        return None;
     }
 
-    handle_websocket(stream, peer_addr, state);
+    Some(stream.try_clone().expect("Failed to clone stream after handshake"))
 }
 
-/// Encode a text message as a WebSocket frame and write it.
-fn ws_send_text(stream: &mut StdTcpStream, codec: &mut FrameCodec, text: &str) -> io::Result<()> {
-    use asupersync::bytes::BytesMut;
-    use asupersync::codec::Encoder;
-    use io::Write;
+// ── Shared WebSocket writer ──────────────────────────────────────────────────
 
-    let frame = Frame::from(Message::text(text));
-    let mut buf = BytesMut::with_capacity(text.len() + 14);
-    codec
-        .encode(frame, &mut buf)
-        .map_err(|e| io::Error::other(format!("WS encode: {e}")))?;
-    stream.write_all(&buf)?;
-    Ok(())
+/// Thread-safe WebSocket writer. All writes go through this to prevent
+/// frame interleaving between the read thread (pong, RPC responses) and
+/// the broadcast forwarder thread.
+struct WsWriter {
+    stream: StdTcpStream,
+    codec: FrameCodec,
 }
 
-/// Read and decode one WebSocket message (blocking).
-fn ws_recv(
+impl WsWriter {
+    fn new(stream: StdTcpStream) -> Self {
+        Self {
+            stream,
+            codec: FrameCodec::server(),
+        }
+    }
+
+    fn send_text(&mut self, text: &str) -> io::Result<()> {
+        use asupersync::bytes::BytesMut;
+        use asupersync::codec::Encoder;
+        use io::Write;
+
+        let frame = Frame::from(Message::text(text));
+        let mut buf = BytesMut::with_capacity(text.len() + 14);
+        self.codec
+            .encode(frame, &mut buf)
+            .map_err(|e| io::Error::other(format!("WS encode: {e}")))?;
+        self.stream.write_all(&buf)
+    }
+
+    fn send_pong(&mut self, payload: Vec<u8>) -> io::Result<()> {
+        use asupersync::bytes::BytesMut;
+        use asupersync::codec::Encoder;
+        use io::Write;
+
+        let frame = Frame::pong(payload);
+        let mut buf = BytesMut::with_capacity(128);
+        self.codec
+            .encode(frame, &mut buf)
+            .map_err(|e| io::Error::other(format!("WS pong encode: {e}")))?;
+        self.stream.write_all(&buf)
+    }
+
+    fn send_raw_bytes(&mut self, bytes: &[u8]) -> io::Result<()> {
+        use io::Write;
+        self.stream.write_all(bytes)
+    }
+}
+
+// ── Read-only WebSocket frame decoder ────────────────────────────────────────
+
+/// Decoded frame result from the read side.
+enum ReadResult {
+    Text(String),
+    Binary(Vec<u8>),
+    Ping(Vec<u8>),
+}
+
+fn ws_read(
     stream: &mut StdTcpStream,
     codec: &mut FrameCodec,
     read_buf: &mut asupersync::bytes::BytesMut,
-) -> io::Result<Option<Message>> {
+) -> io::Result<Option<ReadResult>> {
     use asupersync::codec::Decoder;
     use io::Read;
 
     loop {
-        // Try to decode a frame from the buffer
         match codec.decode(read_buf) {
             Ok(Some(frame)) => match frame.opcode {
                 Opcode::Text => {
                     let text = String::from_utf8_lossy(&frame.payload).to_string();
-                    return Ok(Some(Message::Text(text)));
+                    return Ok(Some(ReadResult::Text(text)));
                 }
+                Opcode::Binary => return Ok(Some(ReadResult::Binary(frame.payload.to_vec()))),
+                Opcode::Ping => return Ok(Some(ReadResult::Ping(frame.payload.to_vec()))),
                 Opcode::Close => return Ok(None),
-                Opcode::Ping => {
-                    // Send pong — reuse the write codec (server role, no masking)
-                    // For simplicity, we send pong inline
-                    let mut write_codec = FrameCodec::server();
-                    let pong = Frame::pong(frame.payload);
-                    let mut pong_buf = asupersync::bytes::BytesMut::with_capacity(128);
-                    let _ = asupersync::codec::Encoder::encode(
-                        &mut write_codec,
-                        pong,
-                        &mut pong_buf,
-                    );
-                    let _ = io::Write::write_all(stream, &pong_buf);
-                    continue;
-                }
-                _ => continue, // Ignore pong, binary, continuation
+                _ => continue, // Pong, continuation — skip
             },
             Ok(None) => {
-                // Need more data
                 let mut tmp = [0u8; 4096];
                 let n = stream.read(&mut tmp)?;
                 if n == 0 {
-                    return Ok(None); // EOF
+                    return Ok(None);
                 }
                 read_buf.extend_from_slice(&tmp[..n]);
             }
-            Err(e) => {
-                return Err(io::Error::other(format!("WS decode: {e}")));
-            }
+            Err(e) => return Err(io::Error::other(format!("WS decode: {e}"))),
         }
     }
 }
 
-fn handle_websocket(stream: StdTcpStream, peer_addr: std::net::SocketAddr, state: Registry) {
-    // The stream is shared between the read thread (this thread) and
-    // the write thread (broadcast forwarder). We use a Mutex for safe sharing.
-    let write_stream = Arc::new(Mutex::new(stream.try_clone().expect("Failed to clone TcpStream")));
-    let mut read_stream = stream;
+// ── Registry WebSocket handler (/ws) ─────────────────────────────────────────
 
-    // Set read timeout so ws_recv doesn't block forever —
-    // this lets us periodically check for shutdown/drain broadcasts.
+fn handle_registry_ws(
+    stream: StdTcpStream,
+    peer_addr: std::net::SocketAddr,
+    state: Registry,
+) {
+    let writer = Arc::new(Mutex::new(WsWriter::new(
+        stream.try_clone().expect("clone for writer"),
+    )));
+    let mut read_stream = stream;
     let _ = read_stream.set_read_timeout(Some(Duration::from_millis(100)));
 
     let mut read_codec = FrameCodec::server();
     let mut read_buf = asupersync::bytes::BytesMut::with_capacity(8192);
 
-    // Send init event with current node list
+    // Send init event
     {
         let nodes: Vec<NodeInfo> = state
             .nodes
@@ -266,17 +318,15 @@ fn handle_websocket(stream: StdTcpStream, peer_addr: std::net::SocketAddr, state
             "nodes": nodes,
             "protocol_version": "1"
         });
-        let mut write_codec = FrameCodec::server();
-        let mut ws = write_stream.lock().unwrap();
-        if ws_send_text(&mut ws, &mut write_codec, &init.to_string()).is_err() {
+        let mut w = writer.lock().unwrap();
+        if w.send_text(&init.to_string()).is_err() {
             return;
         }
     }
 
-    // Broadcast forwarder: subscribes to broadcast events and writes them
-    // to the WebSocket via the shared write stream.
+    // Broadcast forwarder thread
     let mut rx = state.tx.subscribe();
-    let broadcast_write = write_stream.clone();
+    let broadcast_writer = writer.clone();
     let broadcast_running = Arc::new(std::sync::atomic::AtomicBool::new(true));
     let br = broadcast_running.clone();
 
@@ -288,13 +338,12 @@ fn handle_websocket(stream: StdTcpStream, peer_addr: std::net::SocketAddr, state
 
         rt.block_on(async {
             let cx = ephemeral_cx();
-            let mut write_codec = FrameCodec::server();
             while let Ok(event) = rx.recv(&cx).await {
                 if !br.load(std::sync::atomic::Ordering::Relaxed) {
                     break;
                 }
-                let mut ws = broadcast_write.lock().unwrap();
-                if ws_send_text(&mut ws, &mut write_codec, &event).is_err() {
+                let mut w = broadcast_writer.lock().unwrap();
+                if w.send_text(&event).is_err() {
                     break;
                 }
             }
@@ -306,8 +355,8 @@ fn handle_websocket(stream: StdTcpStream, peer_addr: std::net::SocketAddr, state
     let cx = ephemeral_cx();
 
     loop {
-        match ws_recv(&mut read_stream, &mut read_codec, &mut read_buf) {
-            Ok(Some(Message::Text(text))) => {
+        match ws_read(&mut read_stream, &mut read_codec, &mut read_buf) {
+            Ok(Some(ReadResult::Text(text))) => {
                 if let Ok(req) = serde_json::from_str::<rpc::RpcRequest>(&text) {
                     if req.method == "register" {
                         if let Some(ref params) = req.params {
@@ -318,18 +367,23 @@ fn handle_websocket(stream: StdTcpStream, peer_addr: std::net::SocketAddr, state
                     }
                     let response = rpc::dispatch(&cx, req, &state);
                     let out = serde_json::to_string(&response).unwrap();
-                    let mut write_codec = FrameCodec::server();
-                    let mut ws = write_stream.lock().unwrap();
-                    if ws_send_text(&mut ws, &mut write_codec, &out).is_err() {
+                    let mut w = writer.lock().unwrap();
+                    if w.send_text(&out).is_err() {
                         break;
                     }
                 }
             }
-            Ok(None) => break, // Close or EOF
-            Ok(Some(_)) => {}  // Binary, etc.
+            Ok(Some(ReadResult::Ping(payload))) => {
+                let mut w = writer.lock().unwrap();
+                if w.send_pong(payload).is_err() {
+                    break;
+                }
+            }
+            Ok(None) => break,
+            Ok(Some(_)) => {}
             Err(e) => {
                 if e.kind() == io::ErrorKind::WouldBlock || e.kind() == io::ErrorKind::TimedOut {
-                    continue; // Read timeout — loop back and try again
+                    continue;
                 }
                 warn!(peer = %peer_addr, error = %e, "WebSocket receive error");
                 break;
@@ -337,8 +391,7 @@ fn handle_websocket(stream: StdTcpStream, peer_addr: std::net::SocketAddr, state
         }
     }
 
-    // Mark node offline on disconnect BEFORE stopping the broadcast forwarder,
-    // so other clients receive the node_offline event.
+    // Mark node offline BEFORE stopping broadcast forwarder
     if let Some(node_id) = registered_node_id {
         let mut nodes = state
             .nodes
@@ -354,10 +407,208 @@ fn handle_websocket(stream: StdTcpStream, peer_addr: std::net::SocketAddr, state
         let _ = state.tx.send(&cx, event);
     }
 
-    // Give the broadcast forwarder a moment to flush the offline event
     std::thread::sleep(Duration::from_millis(50));
-
-    // Stop broadcast forwarder
     broadcast_running.store(false, std::sync::atomic::Ordering::Relaxed);
     let _ = broadcast_handle.join();
+}
+
+// ── Agent proxy WebSocket handler (/ws/agent/{nodeId}) ───────────────────────
+
+fn handle_proxy_ws(
+    stream: StdTcpStream,
+    peer_addr: std::net::SocketAddr,
+    node_id: &str,
+    state: &Registry,
+) {
+    // Look up the node's local address
+    let (agent_host, agent_port) = {
+        let nodes = state.nodes.read().expect("nodes lock poisoned");
+        match nodes.get(node_id) {
+            Some(node) if node.status == "active" => {
+                // Connect to localhost since the agent is on this machine
+                ("127.0.0.1".to_string(), node.port)
+            }
+            Some(_) => {
+                let mut w = WsWriter::new(stream);
+                let err = serde_json::json!({ "error": "Agent is offline" }).to_string();
+                let _ = w.send_text(&err);
+                return;
+            }
+            None => {
+                let mut w = WsWriter::new(stream);
+                let err = serde_json::json!({ "error": "Agent not found" }).to_string();
+                let _ = w.send_text(&err);
+                return;
+            }
+        }
+    };
+
+    // Connect to the agent's local WebSocket
+    let agent_addr = format!("{agent_host}:{agent_port}");
+    let mut agent_stream = match StdTcpStream::connect_timeout(
+        &agent_addr.parse().unwrap(),
+        Duration::from_secs(5),
+    ) {
+        Ok(s) => s,
+        Err(e) => {
+            warn!(node_id, error = %e, "Failed to connect to agent");
+            let mut w = WsWriter::new(stream);
+            let err =
+                serde_json::json!({ "error": format!("Cannot reach agent: {e}") }).to_string();
+            let _ = w.send_text(&err);
+            return;
+        }
+    };
+
+    // Perform client-side WebSocket handshake to the agent
+    {
+        use io::{Read, Write};
+        let key = base64_ws_key();
+        let req = format!(
+            "GET / HTTP/1.1\r\n\
+             Host: {agent_addr}\r\n\
+             Upgrade: websocket\r\n\
+             Connection: Upgrade\r\n\
+             Sec-WebSocket-Key: {key}\r\n\
+             Sec-WebSocket-Version: 13\r\n\r\n"
+        );
+        if agent_stream.write_all(req.as_bytes()).is_err() {
+            return;
+        }
+        let mut resp_buf = [0u8; 1024];
+        let _ = agent_stream.read(&mut resp_buf);
+        // Accept any 101 response — the agent is a local trusted server
+    }
+
+    // Bidirectional relay: dashboard ↔ agent
+    // Two threads: one reads from dashboard and writes to agent,
+    // the other reads from agent and writes to dashboard.
+    let dashboard_read = stream;
+    let dashboard_writer = Arc::new(Mutex::new(WsWriter::new(
+        dashboard_read.try_clone().expect("clone dashboard for write"),
+    )));
+
+    let agent_writer = Arc::new(Mutex::new(WsWriter::new(
+        agent_stream.try_clone().expect("clone agent for write"),
+    )));
+
+    let mut dash_read = dashboard_read;
+    let _ = dash_read.set_read_timeout(Some(Duration::from_millis(100)));
+    let _ = agent_stream.set_read_timeout(Some(Duration::from_millis(100)));
+
+    let dash_writer_for_agent = dashboard_writer.clone();
+    let agent_writer_for_agent = agent_writer.clone();
+    let peer = peer_addr;
+
+    // Thread: agent → dashboard
+    let agent_to_dash = std::thread::spawn(move || {
+        let mut codec = FrameCodec::server();
+        let mut buf = asupersync::bytes::BytesMut::with_capacity(8192);
+        loop {
+            match ws_read(&mut agent_stream, &mut codec, &mut buf) {
+                Ok(Some(ReadResult::Text(text))) => {
+                    let mut w = dash_writer_for_agent.lock().unwrap();
+                    if w.send_text(&text).is_err() {
+                        break;
+                    }
+                }
+                Ok(Some(ReadResult::Binary(data))) => {
+                    let mut w = dash_writer_for_agent.lock().unwrap();
+                    if w.send_raw_bytes(&data).is_err() {
+                        break;
+                    }
+                }
+                Ok(Some(ReadResult::Ping(payload))) => {
+                    let mut w = agent_writer_for_agent.lock().unwrap();
+                    if w.send_pong(payload).is_err() {
+                        break;
+                    }
+                }
+                Ok(None) => break,
+                Err(e) => {
+                    if e.kind() == io::ErrorKind::WouldBlock
+                        || e.kind() == io::ErrorKind::TimedOut
+                    {
+                        continue;
+                    }
+                    break;
+                }
+            }
+        }
+    });
+
+    // This thread: dashboard → agent
+    let mut codec = FrameCodec::server();
+    let mut buf = asupersync::bytes::BytesMut::with_capacity(8192);
+    loop {
+        match ws_read(&mut dash_read, &mut codec, &mut buf) {
+            Ok(Some(ReadResult::Text(text))) => {
+                // Forward text from dashboard to agent as a client frame (masked)
+                use asupersync::codec::Encoder;
+
+                let mut client_codec = FrameCodec::client();
+                let frame = Frame::from(Message::text(&text));
+                let mut out = asupersync::bytes::BytesMut::with_capacity(text.len() + 14);
+                if client_codec.encode(frame, &mut out).is_ok() {
+                    let mut w = agent_writer.lock().unwrap();
+                    let _ = w.send_raw_bytes(&out);
+                }
+            }
+            Ok(Some(ReadResult::Ping(payload))) => {
+                let mut w = dashboard_writer.lock().unwrap();
+                if w.send_pong(payload).is_err() {
+                    break;
+                }
+            }
+            Ok(None) => break,
+            Ok(Some(_)) => {}
+            Err(e) => {
+                if e.kind() == io::ErrorKind::WouldBlock || e.kind() == io::ErrorKind::TimedOut {
+                    continue;
+                }
+                warn!(peer = %peer, error = %e, "Proxy read error");
+                break;
+            }
+        }
+    }
+
+    let _ = agent_to_dash.join();
+}
+
+/// Generate a random base64-encoded WebSocket key for client handshake.
+fn base64_ws_key() -> String {
+    use std::time::SystemTime;
+    let seed = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let bytes: [u8; 16] = {
+        let mut b = [0u8; 16];
+        for (i, byte) in b.iter_mut().enumerate() {
+            *byte = ((seed >> (i * 4)) & 0xFF) as u8;
+        }
+        b
+    };
+    // Simple base64 encode
+    const CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut result = String::with_capacity(24);
+    for chunk in bytes.chunks(3) {
+        let b0 = chunk[0] as u32;
+        let b1 = if chunk.len() > 1 { chunk[1] as u32 } else { 0 };
+        let b2 = if chunk.len() > 2 { chunk[2] as u32 } else { 0 };
+        let triple = (b0 << 16) | (b1 << 8) | b2;
+        result.push(CHARS[((triple >> 18) & 0x3F) as usize] as char);
+        result.push(CHARS[((triple >> 12) & 0x3F) as usize] as char);
+        if chunk.len() > 1 {
+            result.push(CHARS[((triple >> 6) & 0x3F) as usize] as char);
+        } else {
+            result.push('=');
+        }
+        if chunk.len() > 2 {
+            result.push(CHARS[(triple & 0x3F) as usize] as char);
+        } else {
+            result.push('=');
+        }
+    }
+    result
 }

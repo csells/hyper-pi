@@ -2,18 +2,17 @@
  * pi-socket: Hyper-Pi WebSocket extension for the pi coding agent
  *
  * Exposes each pi CLI instance via a local WebSocket server, broadcasts
- * agent events in real time, and optionally registers with the hypivisor.
+ * agent events in real time, and registers with the hypivisor.
  */
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { WebSocketServer, WebSocket } from "ws";
 import portfinder from "portfinder";
 import os from "node:os";
 import { buildInitState } from "./history.js";
-import { log } from "./log.js";
 import type { AgentEvent, RpcRequest } from "./types.js";
 
 export default function piSocket(pi: ExtensionAPI) {
-  const nodeId = `${os.hostname()}-${Math.random().toString(36).substring(2, 8)}`;
+  const nodeId = `${os.hostname()}-${process.pid}`;
   let wss: WebSocketServer | null = null;
   let hypivisorWs: WebSocket | null = null;
 
@@ -26,10 +25,8 @@ export default function piSocket(pi: ExtensionAPI) {
   pi.on("session_start", async (_event, ctx) => {
     const port = await portfinder.getPortPromise({ port: startPort });
     wss = new WebSocketServer({ port });
-    log.info(`Listening on ws://localhost:${port}`);
 
     wss.on("connection", (ws) => {
-      log.info("Client connected");
       const initPayload = buildInitState(
         ctx.sessionManager.getBranch(),
         pi.getAllTools(),
@@ -45,16 +42,12 @@ export default function piSocket(pi: ExtensionAPI) {
         }
       });
 
-      ws.on("error", (err) => {
-        log.error("Client WebSocket error", err);
-      });
+      ws.on("error", () => {});
     });
 
-    wss.on("error", (err) => {
-      log.error("WebSocket server error", err);
-    });
+    wss.on("error", () => {});
 
-    connectToHypivisor(port, ctx);
+    connectToHypivisor(port);
   });
 
   // ── Event broadcasting ──────────────────────────────────────
@@ -82,12 +75,11 @@ export default function piSocket(pi: ExtensionAPI) {
 
   // ── Shutdown ────────────────────────────────────────────────
   pi.on("session_shutdown", async () => {
-    log.info("Session shutting down");
     if (wss) wss.close();
     if (hypivisorWs) hypivisorWs.close();
   });
 
-  // ── Broadcast to all connected clients (snapshot to avoid race) ─
+  // ── Broadcast to all connected clients ──────────────────────
   function broadcast(payload: AgentEvent) {
     if (!wss) return;
     const msg = JSON.stringify(payload);
@@ -100,22 +92,19 @@ export default function piSocket(pi: ExtensionAPI) {
   }
 
   // ── Hypivisor connection with reconnect loop ────────────────
-  function connectToHypivisor(port: number, ctx: { ui: { notify: (msg: string, level?: "info" | "warning" | "error") => void } }) {
+  function connectToHypivisor(port: number) {
     const url = hypiToken
       ? `${hypivisorUrl}?token=${encodeURIComponent(hypiToken)}`
       : hypivisorUrl;
 
     try {
       hypivisorWs = new WebSocket(url);
-    } catch (err) {
-      log.error("Failed to create hypivisor WebSocket", err);
-      scheduleReconnect(port, ctx);
+    } catch {
+      scheduleReconnect(port);
       return;
     }
 
     hypivisorWs.on("open", () => {
-      log.info("Connected to hypivisor");
-
       const rpc: RpcRequest = {
         id: "reg",
         method: "register",
@@ -131,15 +120,13 @@ export default function piSocket(pi: ExtensionAPI) {
     });
 
     hypivisorWs.on("close", () => {
-      scheduleReconnect(port, ctx);
+      scheduleReconnect(port);
     });
 
-    hypivisorWs.on("error", () => {
-      // Suppress — onclose handles reconnect
-    });
+    hypivisorWs.on("error", () => {});
   }
 
-  function scheduleReconnect(port: number, ctx: { ui: { notify: (msg: string, level?: "info" | "warning" | "error") => void } }) {
-    setTimeout(() => connectToHypivisor(port, ctx), reconnectMs);
+  function scheduleReconnect(port: number) {
+    setTimeout(() => connectToHypivisor(port), reconnectMs);
   }
 }
