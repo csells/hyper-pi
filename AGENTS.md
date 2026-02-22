@@ -63,14 +63,16 @@ The `harden-pi-socket` skill (`.pi/skills/harden-pi-socket/`) closes gaps in the
 
 ## Browser Testing with Surf
 
-When using `surf` for browser automation and testing:
+**NEVER create or close browser tabs/windows.** The user's browser is their workspace — not yours.
 
-- **Never use `surf tab.new`** — it spawns new browser windows/tabs that clutter the user's browser.
-- **Always use `surf navigate <url>`** to reuse the current tab.
-- **Name a tab once** with `surf tab.name --tab-id <id> pide` and then `surf tab.switch pide` to return to it.
-- **Use `surf console --level error`** to check for runtime errors after every navigation and interaction.
-- **Use `surf screenshot`** to visually verify rendering — don't trust that "no errors" means "it works."
-- **Start background services with `tmux`**, not `nohup` or `&` (which get killed by bash tool timeouts).
+- **NEVER use `surf tab.new`** — opens unwanted windows. FORBIDDEN.
+- **NEVER use `surf tab.close`** — destroys the user's tabs. FORBIDDEN.
+- **ALWAYS use `surf navigate <url>`** to reuse whatever tab surf is currently on.
+- **ALWAYS use `surf --tab-id <id>`** if you need a specific tab — find it with `surf tab.list` first.
+- Use `surf console --level error` to check for runtime errors after every navigation and interaction.
+- Use `surf screenshot` to visually verify rendering — don't trust that "no errors" means "it works."
+- Start background services with `tmux`, not `nohup` or `&` (which get killed by bash tool timeouts).
+- If you need a clean browser state, use `surf navigate` to reload — do NOT close and reopen tabs.
 
 ## Architecture Best Practices
 
