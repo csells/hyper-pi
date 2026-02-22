@@ -11,7 +11,10 @@
   --danger: #ef4444;
 }
 
-* {
+/* Global box-sizing — scoped to pi-de layout elements to avoid
+   conflicting with pi-web-ui's Tailwind base layer. */
+.pi-de-layout,
+.pi-de-layout *:not(.agent-interface-container *) {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
@@ -536,6 +539,20 @@ body {
   cursor: pointer;
   min-height: 44px;
   min-width: 44px;
+}
+
+/* ── Agent Interface Container ──────────────────────────────── */
+.agent-interface-container {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.agent-interface-container agent-interface {
+  flex: 1;
+  min-height: 0;
 }
 
 /* ── Mobile (<768px) ───────────────────────────────────────── */

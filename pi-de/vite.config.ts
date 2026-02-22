@@ -7,4 +7,42 @@ export default defineConfig({
     port: 5180,
     open: true,
   },
+  // pi-ai bundles Node-only providers (AWS Bedrock, etc.) that import
+  // "stream", "tls", etc. These are unused in the browser — stub them out.
+  resolve: {
+    alias: {
+      stream: "stream-browserify",
+    },
+  },
+  build: {
+    rollupOptions: {
+      // Treat Node builtins as external — they're never called in browser
+      external: (id) => {
+        if (
+          id === "stream" ||
+          id === "tls" ||
+          id === "net" ||
+          id === "fs" ||
+          id === "path" ||
+          id === "util" ||
+          id === "os" ||
+          id === "crypto" ||
+          id === "http" ||
+          id === "https" ||
+          id === "http2" ||
+          id === "zlib" ||
+          id === "dns" ||
+          id === "child_process" ||
+          id.startsWith("node:")
+        ) {
+          return true;
+        }
+        return false;
+      },
+    },
+  },
+  // Suppress Vite warnings about Node module externalization during dev
+  optimizeDeps: {
+    exclude: ["@mariozechner/pi-ai"],
+  },
 });

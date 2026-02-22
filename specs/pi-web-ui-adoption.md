@@ -1,120 +1,88 @@
 # Pi-DE: Adopt @mariozechner/pi-web-ui Components
 
-Status: Draft
+Status: **Implemented**
 Created: 2026-02-22
 
 ---
 
-## Research Findings
+## Summary
 
-### The package is real and published
+Pi-DE now uses the official `@mariozechner/pi-web-ui` `<agent-interface>` web component
+for the chat stage, satisfying requirements R-UI-24 and R-UI-34.
 
-`@mariozechner/pi-web-ui` exists on npm and in the pi-mono monorepo at `packages/web-ui/`.
-It is built with **mini-lit web components** and **Tailwind CSS v4** (NOT React).
+### What changed
 
-- npm: https://www.npmjs.com/package/@mariozechner/pi-web-ui
-- GitHub: https://github.com/badlogic/pi-mono/tree/main/packages/web-ui
+| File | Change |
+|------|--------|
+| `package.json` | Added `@mariozechner/pi-web-ui`, `@mariozechner/pi-agent-core`, `@mariozechner/pi-ai` |
+| `src/RemoteAgent.ts` | **New.** Duck-types the `Agent` interface over a pi-socket WebSocket |
+| `src/useAgent.ts` | Returns a `RemoteAgent` instead of raw `ChatMessage[]` |
+| `src/App.tsx` | Chat stage now renders `<agent-interface>` web component |
+| `src/web-ui.d.ts` | **New.** TypeScript JSX declarations for custom elements |
+| `src/App.css` | Added `.agent-interface-container` styles; scoped global reset |
+| `vite.config.ts` | Externalize Node builtins pulled in by pi-ai providers |
 
-### What pi-web-ui provides (from npm + GitHub source)
+### Architecture
 
-**Components** (`src/components/`):
-- `ChatPanel` — High-level chat interface with built-in artifacts panel
-- `AgentInterface` — Lower-level chat interface (custom element `<agent-interface>`)
-- `MessageList` / `Messages` — Message rendering with streaming support
-- `StreamingMessageContainer` — Handles real-time streaming tokens
-- `ThinkingBlock` — Shows model thinking/reasoning
-- `Input` — Chat input with attachment support
-- `MessageEditor` — Edit messages in history
-- `AttachmentTile` — PDF, DOCX, XLSX, PPTX, images with preview
-- `ConsoleBlock` — Console/tool output rendering
-- `ExpandableSection` — Collapsible UI sections
-- `SandboxedIframe` — Sandboxed execution for artifacts
-- `message-renderer-registry` — Extensible message type rendering
+```
+┌──────────────────────────────────────────────────┐
+│                  Pi-DE (React)                   │
+│  ┌────────────┐  ┌─────────────────────────────┐ │
+│  │  Sidebar    │  │  <agent-interface>          │ │
+│  │  (React)    │  │  (pi-web-ui / Lit)          │ │
+│  │  - Roster   │  │  - MessageList              │ │
+│  │  - Spawn    │  │  - StreamingContainer       │ │
+│  └────────────┘  │  - MessageEditor             │ │
+│                   │  - ThinkingBlock             │ │
+│                   └──────────┬──────────────────┘ │
+│                              │ .session            │
+│                   ┌──────────▼──────────────────┐ │
+│                   │  RemoteAgent                 │ │
+│                   │  (duck-types Agent)          │ │
+│                   │  - state: AgentState         │ │
+│                   │  - subscribe() → AgentEvent  │ │
+│                   │  - prompt() → ws.send()      │ │
+│                   └──────────┬──────────────────┘ │
+└──────────────────────────────┼────────────────────┘
+                               │ WebSocket
+                    ┌──────────▼──────────────────┐
+                    │  pi-socket extension         │
+                    │  (running inside pi CLI)     │
+                    └─────────────────────────────┘
+```
 
-**Dialogs** (`src/dialogs/`):
-- `SettingsDialog`, `SessionListDialog`, `ApiKeyPromptDialog`, `ModelSelector`
+### RemoteAgent event mapping
 
-**Storage** (`src/storage/`):
-- `AppStorage`, `IndexedDBStorageBackend`
-- `SettingsStore`, `ProviderKeysStore`, `SessionsStore`, `CustomProvidersStore`
+| pi-socket event | → AgentEvent | State change |
+|-----------------|-------------|-------------|
+| `init_state` | `agent_end` | Rebuild `messages[]`, set `tools[]` |
+| `message_start` (assistant) | `agent_start`, `turn_start`, `message_start` | `isStreaming = true` |
+| `delta` | `message_update` (text_delta) | Append to streaming assistant message |
+| `tool_start` | `tool_execution_start`, `message_update` (toolcall_start) | Add to `pendingToolCalls` |
+| `tool_end` | `tool_execution_end` | Remove from `pendingToolCalls`, add `toolResult` |
+| `message_end` (assistant) | `message_end`, `turn_end`, `agent_end` | `isStreaming = false`, finalize message |
 
-**Tools** (`src/tools/`):
-- JavaScript REPL, document extraction, artifacts
+### Limitations vs. local Agent
 
-**Styling:**
-- `app.css` — Pre-built Tailwind CSS
-- Theme support via `@mariozechner/mini-lit/themes/claude.css`
+- **No abort:** Remote agents can't be aborted from the web UI (Ctrl+C at terminal)
+- **No model switching:** Model is owned by the remote pi instance
+- **No thinking level control:** Owned by the remote pi instance
+- **No attachments:** pi-socket doesn't support file upload
+- **Tool results are stubs:** pi-socket only sends tool name + isError, not full output
 
-### What Pi-DE currently does (NO pi-web-ui usage)
+These are disabled in the `<agent-interface>` config:
+```tsx
+ai.enableModelSelector = false;
+ai.enableThinkingSelector = false;
+ai.enableAttachments = false;
+```
 
-Pi-DE is entirely hand-rolled React + custom CSS:
-- `package.json` — Only deps: `react`, `react-dom`. Zero pi packages.
-- Chat is a `<div className="chat-area">` with `.map()` over `{role, content}` objects
-- Raw `white-space: pre-wrap` text — no markdown rendering, no code highlighting
-- No thinking block rendering
-- No tool execution visualization (just system messages)
-- No attachment support
-- Theme is CSS custom properties in App.css
-- No streaming container — just appending text
+### What you get
 
-### Spec violations
-
-- **R-UI-24:** Pi-DE MUST render the conversation using `ChatPanel` from `@mariozechner/pi-web-ui` — ❌ VIOLATED
-- **R-UI-34:** Pi-DE MUST use `@mariozechner/pi-web-ui` components where available — ❌ VIOLATED
-
----
-
-## Key Architectural Challenge
-
-**pi-web-ui uses mini-lit web components, NOT React.**
-
-The components are Lit-based custom elements (e.g., `<agent-interface>`, `<chat-panel>`).
-They expect a local `Agent` instance from `@mariozechner/pi-agent-core`, not a remote WebSocket.
-
-Pi-DE's architecture is:
-1. Browser connects to hypivisor via WebSocket (roster/events)
-2. Browser connects directly to pi-socket agent via WebSocket (chat I/O)
-3. Receives `init_state` + streaming events as JSON
-
-pi-web-ui expects:
-1. An `Agent` instance with `.prompt()`, `.subscribe()`, `.abort()`, etc.
-2. Events emitted via the agent-core event system
-
----
-
-## Integration Path Options
-
-### Option A: Use pi-web-ui components inside React
-- Web components work inside React (render `<agent-interface>` or `<chat-panel>` as custom elements)
-- Create an adapter/proxy `Agent`-like object that:
-  - Wraps the pi-socket WebSocket connection
-  - Translates WebSocket events → agent-core event format
-  - Translates `.prompt()` calls → WebSocket sends
-- **Gain:** proper markdown rendering, code highlighting, thinking blocks, tool cards, streaming UI
-- **Cost:** adapter complexity, mini-lit + Tailwind CSS alongside existing styles
-
-### Option B: Replace React entirely with vanilla + pi-web-ui
-- Build Pi-DE as a vanilla TS app using pi-web-ui components directly
-- Keep React only for the roster sidebar / spawn modal (or also replace those)
-- **Gain:** full alignment with pi-web-ui's design system
-- **Cost:** major rewrite of existing working code
-
-### Option C: Keep React, render pi-web-ui web components in the chat stage only (recommended)
-- Only the center chat pane uses `<agent-interface>` or `<chat-panel>`
-- Sidebar and modals remain React
-- Smallest change footprint
-- Need the WebSocket→Agent adapter regardless
-
----
-
-## Implementation Steps
-
-1. **Investigate pi-web-ui Agent interface contract** — what methods/events does `AgentInterface` expect from the `Agent` object
-2. **Design WebSocket-to-Agent adapter** that wraps pi-socket connection as a pi-agent-core compatible Agent
-3. **Install dependencies** — `@mariozechner/pi-web-ui`, `@mariozechner/pi-agent-core`, `@mariozechner/pi-ai`
-4. **Replace the hand-rolled chat-area** div in App.tsx with `<agent-interface>` or `<chat-panel>` web component
-5. **Wire the adapter** into the web component's `.session` property
-6. **Import and configure pi-web-ui CSS** (`app.css` or Tailwind theme)
-7. **Update event translation** — map pi-socket `init_state`/`delta`/`tool_start`/`tool_end` events to agent-core event types (`message_update`, `tool_execution_start`, etc.)
-8. **Test rendering** — markdown, code highlighting, thinking blocks, and tool execution cards
-9. **Update specs** if Agent adapter has limitations vs. full local Agent (e.g., no `.abort()`, no model switching)
+- ✅ Proper markdown rendering with syntax-highlighted code blocks
+- ✅ Streaming message display with real-time token updates
+- ✅ Tool execution cards (start/end with success/error status)
+- ✅ Thinking block rendering (when remote agent uses reasoning)
+- ✅ Dark theme via pi-web-ui's Tailwind CSS `.dark` class
+- ✅ Auto-scroll with smart scroll-away detection
+- ✅ Same rendering engine as the official pi web-ui example app

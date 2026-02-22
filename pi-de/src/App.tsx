@@ -4,6 +4,10 @@ import { useAgent } from "./useAgent";
 import SpawnModal from "./SpawnModal";
 import type { NodeInfo } from "./types";
 
+// Import pi-web-ui components (registers <agent-interface> custom element)
+import "@mariozechner/pi-web-ui/app.css";
+import "@mariozechner/pi-web-ui";
+
 const HYPI_TOKEN = import.meta.env.VITE_HYPI_TOKEN || "";
 const HYPIVISOR_PORT = parseInt(import.meta.env.VITE_HYPIVISOR_PORT || "31415", 10);
 
@@ -13,8 +17,7 @@ export default function App() {
   const agent = useAgent(activeNode);
 
   const [showSpawnModal, setShowSpawnModal] = useState(false);
-  const [inputText, setInputText] = useState("");
-  const chatAreaRef = useRef<HTMLDivElement>(null);
+  const agentInterfaceRef = useRef<HTMLElement | null>(null);
 
   // Keep activeNode status in sync with roster
   useEffect(() => {
@@ -27,19 +30,22 @@ export default function App() {
     }
   }, [nodes, activeNode]);
 
-  // Auto-scroll chat
+  // Wire RemoteAgent into <agent-interface> whenever agent or ref changes
   useEffect(() => {
-    const el = chatAreaRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [agent.messages]);
-
-  const handleSend = () => {
-    const text = inputText.trim();
-    if (!text) return;
-    agent.sendMessage(text);
-    agent.addOptimisticMessage(text);
-    setInputText("");
-  };
+    const el = agentInterfaceRef.current;
+    if (!el) return;
+    // Set properties on the Lit web component via typed interface
+    const ai = el as HTMLElement & {
+      session: unknown;
+      enableModelSelector: boolean;
+      enableThinkingSelector: boolean;
+      enableAttachments: boolean;
+    };
+    ai.session = agent.remoteAgent;
+    ai.enableModelSelector = false;
+    ai.enableThinkingSelector = false;
+    ai.enableAttachments = false;
+  }, [agent.remoteAgent, agent.status, activeNode]);
 
   const projectName = (cwd: string) =>
     cwd.split(/[/\\]/).filter(Boolean).pop() ?? cwd;
@@ -109,35 +115,15 @@ export default function App() {
               )}
             </div>
 
-            <div className="chat-area" ref={chatAreaRef}>
-              {agent.messages.map((msg, i) => (
-                <div key={i} className={`chat-msg chat-${msg.role}`}>
-                  {msg.role === "user" && (
-                    <span className="msg-label">You</span>
-                  )}
-                  {msg.role === "assistant" && (
-                    <span className="msg-label">Agent</span>
-                  )}
-                  <div className="msg-content">{msg.content}</div>
-                </div>
-              ))}
-            </div>
+            {agent.historyTruncated && (
+              <div className="truncation-notice">
+                Showing recent history (truncated)
+              </div>
+            )}
 
-            <div className="input-bar">
-              <input
-                type="text"
-                placeholder="Send a message to this agent…"
-                value={inputText}
-                onChange={(e) => setInputText(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleSend()}
-                disabled={agent.status !== "connected"}
-              />
-              <button
-                onClick={handleSend}
-                disabled={agent.status !== "connected"}
-              >
-                Send
-              </button>
+            {/* pi-web-ui AgentInterface web component */}
+            <div className="agent-interface-container dark">
+              <agent-interface ref={agentInterfaceRef} />
             </div>
           </>
         ) : (
