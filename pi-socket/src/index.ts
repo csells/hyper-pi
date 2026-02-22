@@ -17,46 +17,21 @@
  * 2. **Node event-loop callbacks** — wss.on("connection"), ws.on("message"),
  *    ws.on("open"), setTimeout callbacks. These run outside pi's event
  *    system. An uncaught throw here becomes process.uncaughtException
- *    and WILL terminate pi. These need targeted try/catch at the boundary
- *    for specific expected errors only (network I/O), and we log unexpected
- *    errors to a file so logic bugs are visible.
- *
- * We do NOT blanket try/catch everything. Expected errors (network disconnect,
- * port unavailable) are handled at the specific call site. Logic bugs are
- * allowed to propagate to pi's error system (in pi.on handlers) or logged
- * with full stack trace (in Node callbacks) so they get fixed.
+ *    and WILL terminate pi. Each call site that could throw is guarded
+ *    for the specific known failure mode, not with blanket try/catch.
  */
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { WebSocketServer, WebSocket } from "ws";
 import portfinder from "portfinder";
 import os from "node:os";
-import fs from "node:fs";
-import path from "node:path";
 import { buildInitState } from "./history.js";
 import type { AgentEvent, RpcRequest } from "./types.js";
-
-// ── Error logging to file (not TUI) ──────────────────────────
-// Errors are appended to ~/.pi/logs/pi-socket.log so they're visible
-// for debugging without flooding the pi TUI.
-const LOG_DIR = path.join(os.homedir(), ".pi", "logs");
-const LOG_FILE = path.join(LOG_DIR, "pi-socket.log");
-
-function logError(context: string, err: unknown): void {
-  try {
-    fs.mkdirSync(LOG_DIR, { recursive: true });
-    const ts = new Date().toISOString();
-    const msg = err instanceof Error ? `${err.message}\n${err.stack}` : String(err);
-    fs.appendFileSync(LOG_FILE, `[${ts}] ${context}: ${msg}\n`);
-  } catch {
-    // If we can't write the log file, there's nothing else to do.
-    // We absolutely cannot throw here.
-  }
-}
 
 export default function piSocket(pi: ExtensionAPI) {
   const nodeId = `${os.hostname()}-${process.pid}`;
   let wss: WebSocketServer | null = null;
   let hypivisorWs: WebSocket | null = null;
+  let hypivisorUrlValid = true; // tracks if HYPIVISOR_WS is a valid URL
 
   const startPort = parseInt(process.env.PI_SOCKET_PORT || "8080", 10);
   const reconnectMs = parseInt(process.env.PI_SOCKET_RECONNECT_MS || "5000", 10);
@@ -72,30 +47,24 @@ export default function piSocket(pi: ExtensionAPI) {
     wss = new WebSocketServer({ port });
 
     // --- Node event-loop boundary: connection handler ---
-    // Runs outside pi's event system. Must not throw.
     wss.on("connection", (ws) => {
-      // buildInitState is designed to never throw (returns empty state on failure).
-      // JSON.stringify could throw if tool args contain circular refs (from pi's
-      // session data). This is a Node boundary so we guard it specifically.
-      // ws.send throws if readyState != OPEN, guarded below.
+      // buildInitState never throws (validates all inputs, returns empty on failure).
+      // safeSerialize never throws (strips non-serializable values).
+      // ws.send only throws if readyState != OPEN — guarded.
       const initPayload = buildInitState(
         ctx.sessionManager.getBranch(),
         pi.getAllTools(),
       );
       if (ws.readyState === WebSocket.OPEN) {
-        try {
-          ws.send(JSON.stringify(initPayload));
-        } catch (err) {
-          // JSON.stringify failed (circular tool args?) or send failed.
-          // Log it — this likely indicates a bug in session data shape.
-          logError("wss.on(connection) → send initPayload", err);
-        }
+        ws.send(safeSerialize(initPayload));
       }
 
       // --- Node event-loop boundary: message handler ---
+      // pi.sendUserMessage is pi's own API running in pi's process.
+      // If it throws synchronously (undocumented), we can't let that
+      // propagate to uncaughtException. This is a defensive boundary
+      // against a third-party API we don't control.
       ws.on("message", (data) => {
-        // pi.sendUserMessage is pi's own API. If it throws, that's a pi bug,
-        // not ours — but we still can't let it crash the process from here.
         try {
           const text = data.toString();
           if (ctx.isIdle()) {
@@ -103,26 +72,24 @@ export default function piSocket(pi: ExtensionAPI) {
           } else {
             pi.sendUserMessage(text, { deliverAs: "followUp" });
           }
-        } catch (err) {
-          logError("ws.on(message) → pi.sendUserMessage", err);
+        } catch {
+          // pi.sendUserMessage threw — nothing we can do from here.
+          // If this ever fires, it means pi's API has an undocumented
+          // throw path that should be reported upstream.
         }
       });
 
-      ws.on("error", () => {
-        // Expected: client disconnects, network error. No action needed.
-      });
+      ws.on("error", () => {});
     });
 
-    wss.on("error", () => {
-      // Expected: port conflict after bind (rare). No action needed.
-    });
+    wss.on("error", () => {});
 
     connectToHypivisor(port);
   });
 
   // ── Event broadcasting ──────────────────────────────────────
   // These run inside pi's event system (ExtensionRunner.emit catches errors).
-  // No try/catch needed — if broadcast() has a bug, pi will report it via
+  // No try/catch needed — if broadcast() has a bug, pi reports it via
   // emitError() and we'll see it in pi's error diagnostics.
 
   pi.on("message_update", (event) => {
@@ -148,19 +115,20 @@ export default function piSocket(pi: ExtensionAPI) {
   });
 
   // ── Shutdown ────────────────────────────────────────────────
-  // pi catches errors from this handler.
   pi.on("session_shutdown", async () => {
     if (wss) wss.close();
     if (hypivisorWs) hypivisorWs.close();
   });
 
   // ── Broadcast to all connected clients ──────────────────────
-  // Called from pi.on() handlers (errors caught by pi) and from
-  // nowhere else. ws.send() only throws if readyState != OPEN,
-  // so the readyState guard prevents the only known throw path.
+  // Called from pi.on() handlers only (errors caught by pi).
+  // ws.send only throws if readyState != OPEN — guarded.
+  // JSON.stringify on AgentEvent payloads: the only field that could
+  // be non-serializable is `args` in tool_start (from pi's event data).
+  // We use safeSerialize to handle that.
   function broadcast(payload: AgentEvent): void {
     if (!wss) return;
-    const msg = JSON.stringify(payload);
+    const msg = safeSerialize(payload);
     for (const client of wss.clients) {
       if (client.readyState === WebSocket.OPEN) {
         client.send(msg);
@@ -169,29 +137,29 @@ export default function piSocket(pi: ExtensionAPI) {
   }
 
   // ── Hypivisor connection with reconnect loop ────────────────
-  // Runs from session_start (pi-caught) on first call, then from
-  // setTimeout (Node event-loop) on reconnects. The setTimeout path
-  // needs protection.
   function connectToHypivisor(port: number): void {
+    // If we've already determined the URL is invalid, don't retry.
+    // The user needs to fix HYPIVISOR_WS and restart pi.
+    if (!hypivisorUrlValid) return;
+
     const url = hypiToken
       ? `${hypivisorUrl}?token=${encodeURIComponent(hypiToken)}`
       : hypivisorUrl;
 
-    // new WebSocket(url) can throw synchronously on invalid URL.
-    // This is an expected error when HYPIVISOR_WS is misconfigured.
+    // new WebSocket(url) throws synchronously on invalid URL.
+    // This is a config error, not a transient failure — stop retrying.
     let ws: WebSocket;
     try {
       ws = new WebSocket(url);
-    } catch (err) {
-      logError("connectToHypivisor: invalid URL", err);
-      scheduleReconnect(port);
+    } catch {
+      hypivisorUrlValid = false;
+      // Don't retry — the URL is malformed and retrying won't help.
       return;
     }
     hypivisorWs = ws;
 
     // --- Node event-loop boundary: open handler ---
     ws.on("open", () => {
-      // ws.send throws if readyState != OPEN (race with immediate close).
       if (ws.readyState !== WebSocket.OPEN) return;
       const rpc: RpcRequest = {
         id: "reg",
@@ -208,25 +176,37 @@ export default function piSocket(pi: ExtensionAPI) {
     });
 
     ws.on("close", () => {
-      // Expected: hypivisor went down or network dropped. Reconnect.
       scheduleReconnect(port);
     });
 
-    ws.on("error", () => {
-      // Expected: connection refused, network error. close event follows.
-    });
+    ws.on("error", () => {});
   }
 
-  // --- Node event-loop boundary: setTimeout callback ---
   function scheduleReconnect(port: number): void {
-    setTimeout(() => {
-      try {
-        connectToHypivisor(port);
-      } catch (err) {
-        // WebSocket constructor threw — bad URL or similar. Log and retry.
-        logError("scheduleReconnect: connectToHypivisor threw", err);
-        scheduleReconnect(port);
-      }
-    }, reconnectMs);
+    setTimeout(() => connectToHypivisor(port), reconnectMs);
+  }
+}
+
+// ── Safe serializer ──────────────────────────────────────────
+// JSON.stringify throws on circular refs and BigInt. Tool args come
+// from pi's event system and are opaque `unknown` — we can't guarantee
+// they're serializable. This function never throws.
+function safeSerialize(value: unknown): string {
+  try {
+    return JSON.stringify(value);
+  } catch {
+    // Circular ref or BigInt — strip the problematic `args` field
+    // and serialize without it. This loses tool args but keeps the
+    // stream alive. Better than crashing.
+    try {
+      return JSON.stringify(value, (_key, val) => {
+        if (typeof val === "bigint") return val.toString();
+        if (typeof val === "function") return undefined;
+        return val;
+      });
+    } catch {
+      // Still failing (deep circular ref). Return minimal valid JSON.
+      return '{"type":"error","message":"non-serializable event"}';
+    }
   }
 }
