@@ -41,8 +41,19 @@ export default defineConfig({
       },
     },
   },
-  // Suppress Vite warnings about Node module externalization during dev
   optimizeDeps: {
-    exclude: ["@mariozechner/pi-ai"],
+    // pi-ai imports Node-only packages (AWS SDK, etc.) that can't be
+    // pre-bundled for the browser. But some of its transitive deps are
+    // CJS-only and need pre-bundling for ESM named imports to work.
+    // Solution: exclude the Node-heavy packages, include the CJS deps.
+    exclude: [
+      "@mariozechner/pi-ai",
+      "@aws-sdk/client-bedrock-runtime",
+      "@smithy/node-http-handler",
+    ],
+    include: [
+      "@mariozechner/pi-ai > partial-json",
+      "@mariozechner/pi-ai > p-retry",
+    ],
   },
 });
