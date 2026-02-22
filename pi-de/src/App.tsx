@@ -4,15 +4,15 @@ import { useAgent } from "./useAgent";
 import SpawnModal from "./SpawnModal";
 import type { NodeInfo } from "./types";
 
-// ── Lit class-field-shadowing fix ─────────────────────────────────────
-// This side-effect import patches ReactiveElement.performUpdate to clean
-// up class-field-shadowed properties before Lit's dev-mode check.
-// MUST be the first import so it runs before pi-web-ui registers elements.
-import "./patchLit";
-
 // Import pi-web-ui components (registers <agent-interface> custom element)
 import "@mariozechner/pi-web-ui/app.css";
 import "@mariozechner/pi-web-ui";
+
+// ── Lit class-field-shadowing fix ─────────────────────────────────────
+// Patches ReactiveElement.performUpdate to clean up class-field-shadowed
+// properties. MUST be imported AFTER pi-web-ui (needs registered elements)
+// but takes effect before any element's first performUpdate (microtask).
+import "./patchLit";
 
 // Register mini-lit custom elements used by pi-web-ui message rendering.
 // pi-web-ui's Messages.ts uses <markdown-block> and <code-block> but

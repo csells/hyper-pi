@@ -47,6 +47,11 @@ export default defineConfig({
     exclude: [
       "@mariozechner/pi-ai",
       "@mariozechner/pi-web-ui",
+      "@mariozechner/mini-lit",
+      "@lit/reactive-element",
+      "lit",
+      "lit-html",
+      "lit-element",
       "@aws-sdk/client-bedrock-runtime",
       "@smithy/node-http-handler",
     ],
