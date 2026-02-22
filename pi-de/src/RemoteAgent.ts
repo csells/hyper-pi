@@ -137,6 +137,19 @@ export class RemoteAgent {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
     const text = typeof message === "string" ? message : (message as UserMessage).content;
     if (typeof text === "string") {
+      // Optimistically add user message to state (pi-socket doesn't echo it back)
+      const userMessage: UserMessage = {
+        role: "user",
+        content: text,
+        timestamp: Date.now(),
+      };
+      this._state = {
+        ...this._state,
+        messages: [...this._state.messages, userMessage],
+      };
+      this.emit({ type: "message_start", message: userMessage });
+      this.emit({ type: "message_end", message: userMessage });
+
       this.ws.send(text);
     }
   }
