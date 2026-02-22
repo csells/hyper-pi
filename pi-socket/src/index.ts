@@ -4,52 +4,57 @@
  * Exposes each pi CLI instance via a local WebSocket server, broadcasts
  * agent events in real time, and registers with the hypivisor.
  *
- * ## Error handling architecture
+ * ## Error architecture
  *
- * **pi.on() handlers** — pi's ExtensionRunner wraps every handler in
- * try/catch + await. Errors here CANNOT crash pi. We let them propagate
- * so pi reports them and we find logic bugs.
+ * pi.on() handlers: pi catches errors via ExtensionRunner.emit().
+ * We let errors propagate so pi reports them.
  *
- * **Node event-loop callbacks** — wss.on(), ws.on(), setTimeout.
- * These run outside pi's event system. An uncaught throw here kills pi.
+ * Node callbacks (wss.on, ws.on, setTimeout): wrapped with boundary()
+ * which catches unanticipated errors and logs them with needsHardening.
  *
- * Two layers protect against this:
- * 1. Inner: known errors handled at source (safeSerialize, readyState
- *    guards, hypivisorUrlValid, defensive property access in buildInitState)
- * 2. Outer: boundary() wrapper catches everything else and logs it to
- *    ~/.pi/logs/pi-socket-errors.jsonl for the hardening skill to process.
+ * Inner layer: known errors handled at source (safeSerialize, readyState
+ * guards, hypivisorUrlValid, defensive buildInitState).
  *
- * The log should be empty in a well-functioning system. Every entry is
- * a gap in the inner layer that needs a targeted code fix.
+ * Outer layer: boundary() catches everything else → log → harden skill.
+ *
+ * ## Logging
+ *
+ * All operational events are logged to ~/.pi/logs/pi-socket.jsonl as
+ * structured JSONL. Errors needing attention are marked needsHardening.
  */
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { WebSocketServer, WebSocket } from "ws";
 import portfinder from "portfinder";
 import os from "node:os";
 import { buildInitState } from "./history.js";
-import { boundary, setNodeId } from "./safety.js";
+import { boundary } from "./safety.js";
+import * as log from "./log.js";
 import type { AgentEvent, RpcRequest } from "./types.js";
 
 export default function piSocket(pi: ExtensionAPI) {
   const nodeId = `${os.hostname()}-${process.pid}`;
-  setNodeId(nodeId);
-
   let wss: WebSocketServer | null = null;
   let hypivisorWs: WebSocket | null = null;
   let hypivisorUrlValid = true;
+  let clientCount = 0;
 
   const startPort = parseInt(process.env.PI_SOCKET_PORT || "8080", 10);
   const reconnectMs = parseInt(process.env.PI_SOCKET_RECONNECT_MS || "5000", 10);
   const hypivisorUrl = process.env.HYPIVISOR_WS || "ws://localhost:31415/ws";
   const hypiToken = process.env.HYPI_TOKEN || "";
 
+  log.info("pi-socket", "extension loaded", { nodeId, hypivisorUrl, startPort });
+
   // ── Startup ─────────────────────────────────────────────────
-  // Errors caught by pi's ExtensionRunner.emit() — no wrapping needed.
   pi.on("session_start", async (_event, ctx) => {
     const port = await portfinder.getPortPromise({ port: startPort });
     wss = new WebSocketServer({ port });
+    log.info("pi-socket", "WebSocket server listening", { port });
 
     wss.on("connection", boundary("wss.connection", (ws) => {
+      clientCount++;
+      log.info("pi-socket", "client connected", { clientCount });
+
       const initPayload = buildInitState(
         ctx.sessionManager.getBranch(),
         pi.getAllTools(),
@@ -67,6 +72,11 @@ export default function piSocket(pi: ExtensionAPI) {
         }
       }));
 
+      ws.on("close", () => {
+        clientCount--;
+        log.info("pi-socket", "client disconnected", { clientCount });
+      });
+
       ws.on("error", () => {});
     }));
 
@@ -75,7 +85,7 @@ export default function piSocket(pi: ExtensionAPI) {
   });
 
   // ── Event broadcasting ──────────────────────────────────────
-  // Errors caught by pi's ExtensionRunner.emit() — no wrapping needed.
+  // pi catches errors — no wrapping needed.
 
   pi.on("message_update", (event) => {
     if (event.assistantMessageEvent?.type === "text_delta") {
@@ -101,6 +111,7 @@ export default function piSocket(pi: ExtensionAPI) {
 
   // ── Shutdown ────────────────────────────────────────────────
   pi.on("session_shutdown", async () => {
+    log.info("pi-socket", "shutting down", { nodeId });
     if (wss) wss.close();
     if (hypivisorWs) hypivisorWs.close();
   });
@@ -128,6 +139,7 @@ export default function piSocket(pi: ExtensionAPI) {
     try {
       ws = new WebSocket(url);
     } catch {
+      log.warn("hypivisor", "invalid URL, giving up", { url: hypivisorUrl });
       hypivisorUrlValid = false;
       return;
     }
@@ -147,13 +159,17 @@ export default function piSocket(pi: ExtensionAPI) {
         },
       };
       ws.send(JSON.stringify(rpc));
+      log.info("hypivisor", "registered", { nodeId, port });
     }));
 
     ws.on("close", () => {
+      log.warn("hypivisor", "disconnected, will reconnect", { reconnectMs });
       scheduleReconnect(port);
     });
 
-    ws.on("error", () => {});
+    ws.on("error", () => {
+      // close event follows — reconnect handled there.
+    });
   }
 
   function scheduleReconnect(port: number): void {

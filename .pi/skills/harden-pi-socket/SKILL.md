@@ -1,114 +1,163 @@
 ---
 name: harden-pi-socket
 description: >
-  Review pi-socket error log and harden the code. Triggers when asked to
-  "harden pi-socket", "check pi-socket errors", "review extension errors",
-  or "fix pi-socket crashes". Reads the structured error log at
-  ~/.pi/logs/pi-socket-errors.jsonl and proposes code changes that
-  eliminate each error class so it never recurs.
+  Continuously harden the pi-socket extension by analyzing its operational
+  log. Reads ~/.pi/logs/pi-socket.jsonl for errors marked needsHardening,
+  cross-references the hardening ledger for past attempts, and proposes
+  targeted code fixes. Triggers: "harden pi-socket", "check pi-socket
+  errors", "review extension errors", "review pi-socket log".
 ---
 
 # Harden pi-socket
 
-## When to use
-
-Run this skill periodically or after observing issues with the pi-socket
-extension. It reads the structured error log, analyzes each error class,
-and proposes targeted code changes to eliminate them.
-
-## How it works
+## Purpose
 
 The pi-socket extension has a two-layer error architecture:
 
-1. **Inner layer**: Known errors handled at their source with specific
-   logic (safeSerialize, readyState guards, defensive property access).
-2. **Outer layer**: A `boundary()` wrapper on every Node event-loop
-   callback that catches _unanticipated_ errors and logs them to
-   `~/.pi/logs/pi-socket-errors.jsonl`.
+- **Inner layer**: Known errors handled at source (safeSerialize, readyState
+  guards, defensive buildInitState, etc.)
+- **Outer layer**: `boundary()` wrapper catches unanticipated errors and logs
+  them to `~/.pi/logs/pi-socket.jsonl` with `needsHardening: true`.
 
-**The log should be empty in a well-functioning system.** Every entry
-represents a gap in the inner layer. This skill closes those gaps.
+**The hardening log should have zero `needsHardening` entries in a healthy
+system.** Each one represents a gap in the inner layer. This skill closes
+those gaps, tracks what it's done, and learns from past attempts.
+
+## Files
+
+| File | Purpose |
+|------|---------|
+| `~/.pi/logs/pi-socket.jsonl` | Operational log (JSONL). All events. Errors have `needsHardening: true`. |
+| `.pi/skills/harden-pi-socket/ledger.jsonl` | Hardening ledger. Tracks every fix attempt, what worked, what didn't. |
+| `pi-socket/src/index.ts` | Main extension |
+| `pi-socket/src/safety.ts` | boundary() wrapper (outer layer) |
+| `pi-socket/src/log.ts` | Structured logger |
+| `pi-socket/src/history.ts` | Session data parser |
+| `pi-socket/src/types.ts` | Type definitions |
 
 ## Procedure
 
-### Step 1: Read the error log
+### Step 1: Read the operational log
 
 ```bash
-cat ~/.pi/logs/pi-socket-errors.jsonl 2>/dev/null || echo "No errors logged — system is healthy."
+cat ~/.pi/logs/pi-socket.jsonl 2>/dev/null | grep '"needsHardening":true' || echo "No errors needing hardening."
 ```
 
-If the file is empty or doesn't exist, the system is healthy. Done.
+If no errors need hardening, report the system is healthy and stop.
 
-### Step 2: Group errors by boundary and message
+Also review recent info/warn entries to understand operational context:
 
-Each line is a JSON object:
+```bash
+tail -50 ~/.pi/logs/pi-socket.jsonl 2>/dev/null
+```
+
+### Step 2: Read the hardening ledger
+
+```bash
+cat .pi/skills/harden-pi-socket/ledger.jsonl 2>/dev/null || echo "No prior hardening work."
+```
+
+The ledger is JSONL with one entry per hardening action:
+
 ```json
-{"ts":"...","boundary":"wss.connection","error":"...","stack":"...","version":"0.1.0","nodeId":"..."}
+{
+  "ts": "2026-02-22T10:00:00.000Z",
+  "errorClass": "wss.connection:TypeError: Cannot read properties of null",
+  "errorPattern": "Cannot read properties of null",
+  "boundary": "wss.connection",
+  "occurrences": 5,
+  "firstSeen": "2026-02-22T08:00:00.000Z",
+  "lastSeen": "2026-02-22T09:55:00.000Z",
+  "action": "Added null check for ctx.sessionManager in connection handler",
+  "filesChanged": ["pi-socket/src/index.ts"],
+  "commit": "abc1234",
+  "status": "fixed",
+  "notes": "Root cause: session_start ctx was captured but sessionManager was not yet initialized when early connection arrived."
+}
 ```
 
-Group by `boundary` + `error` to find distinct error classes. Count
-occurrences of each. Most-frequent first.
+Fields:
+- `errorClass`: `{boundary}:{error message pattern}` — the unique key
+- `status`: `fixed` | `attempted` | `reverted` | `recurring`
+- `commit`: git SHA of the fix commit (use `git rev-parse HEAD` after committing)
 
-### Step 3: For each error class, read the relevant source code
+### Step 3: Identify new error classes
 
-The boundary names map to source locations:
+Group errors from the log by `boundary` + error message pattern. Compare
+against the ledger. New = not in ledger, or in ledger with status `attempted`
+(previous fix didn't work) or `recurring` (came back).
 
-| Boundary | Source file | What runs there |
-|----------|------------|-----------------|
-| `wss.connection` | `pi-socket/src/index.ts` (wss.on "connection" handler) | buildInitState, safeSerialize, ws.send |
-| `ws.message` | `pi-socket/src/index.ts` (ws.on "message" handler) | pi.sendUserMessage |
-| `hypivisor.open` | `pi-socket/src/index.ts` (ws.on "open" handler) | JSON.stringify, ws.send for registration |
-| `reconnect` | `pi-socket/src/index.ts` (setTimeout callback) | connectToHypivisor |
+For errors in ledger with status `attempted`, read the commit diff:
+```bash
+git show <commit> -- pi-socket/
+```
+This shows what was tried before so you don't repeat failed approaches.
 
-Read:
-- `pi-socket/src/index.ts`
-- `pi-socket/src/history.ts`
-- `pi-socket/src/safety.ts`
-- `pi-socket/src/types.ts`
+### Step 4: For each new error class, analyze and fix
 
-### Step 4: For each error class, propose a targeted fix
+Read the relevant source files. The `boundary` field maps to:
 
-The fix should go in the **inner layer** — handle the specific error at
-its source so the outer layer's boundary() wrapper never catches it again.
+| Boundary | Location |
+|----------|----------|
+| `wss.connection` | index.ts: wss.on("connection") handler |
+| `ws.message` | index.ts: ws.on("message") handler |
+| `hypivisor.open` | index.ts: hypivisor ws.on("open") handler |
+| `reconnect` | index.ts: setTimeout reconnect callback |
 
-Criteria for a good fix:
-- **Specific**: Handles exactly this error condition, not a blanket catch
-- **Tested**: Includes a test case that reproduces and verifies the fix
-- **Eliminates the class**: After the fix, this error can never recur
-- **No silent swallowing**: If the error indicates a real problem (e.g.,
-  pi's API changed), the fix should also update the AGENTS.md or
-  requirements to reflect the new understanding
+For each error:
+1. **Read the stack trace** — find the exact line that threw
+2. **Understand the root cause** — why did this value/state occur?
+3. **Fix in the inner layer** — handle this specific condition at its source,
+   not with a blanket catch. The fix should make this error structurally
+   impossible.
+4. **Add a test** if the error is reproducible
+5. **Verify**: `cd pi-socket && npx tsc --noEmit` and
+   `cd integration-tests && npx vitest run`
 
-### Step 5: Apply the fixes and verify
+### Step 5: Record in the ledger
 
-After applying fixes:
-1. Run `cd pi-socket && npx tsc --noEmit` — must compile clean
-2. Run `cd integration-tests && npx vitest run` — all tests must pass
-3. Run `cd hypivisor && cargo test` — all tests must pass
-
-### Step 6: Clear processed errors
-
-After fixing, archive the processed entries:
+After committing the fix, append to `.pi/skills/harden-pi-socket/ledger.jsonl`:
 
 ```bash
-if [ -f ~/.pi/logs/pi-socket-errors.jsonl ]; then
-  mv ~/.pi/logs/pi-socket-errors.jsonl ~/.pi/logs/pi-socket-errors.$(date +%Y%m%d-%H%M%S).jsonl
-fi
+COMMIT=$(git rev-parse HEAD)
 ```
 
-This preserves history while giving a clean slate for detecting new errors.
+Write a JSONL entry with the errorClass, what you did, the commit SHA,
+files changed, and status. Include notes explaining the root cause so
+future runs understand the history.
 
-### Step 7: Commit
+### Step 6: Mark processed errors
 
-Commit the hardened code with a message describing which error classes
-were eliminated.
+Do NOT delete log entries. They're operational history. The ledger tracks
+which error classes have been addressed. The skill compares log entries
+against the ledger to find unaddressed ones.
 
-## Key files
+### Step 7: If an error class recurs after a fix
 
-- Error log: `~/.pi/logs/pi-socket-errors.jsonl`
-- Safety net: `pi-socket/src/safety.ts`
-- Extension: `pi-socket/src/index.ts`
-- History builder: `pi-socket/src/history.ts`
-- Types: `pi-socket/src/types.ts`
-- Integration tests: `integration-tests/src/smoke.test.ts`
-- Specs: `specs/requirements.md`, `specs/design.md`
+Update the ledger entry status from `fixed` to `recurring`. Read the
+original fix commit with `git show`. Understand why it didn't hold.
+Apply a deeper fix. Record the new attempt as a separate ledger entry
+referencing the previous one in notes.
+
+## Log format reference
+
+Every line in `~/.pi/logs/pi-socket.jsonl`:
+
+```json
+{
+  "ts": "ISO-8601",
+  "level": "info|warn|error",
+  "component": "pi-socket|hypivisor",
+  "msg": "human-readable message",
+  "needsHardening": true,
+  "boundary": "wss.connection",
+  "error": "error message",
+  "stack": "full stack trace",
+  "...": "additional context fields"
+}
+```
+
+- `level: "info"` — normal operations (startup, connect, register)
+- `level: "warn"` — expected degraded state (reconnecting, client dropped)
+- `level: "error"` + `needsHardening: true` — unanticipated error caught by
+  boundary(). THIS is what the skill processes.
