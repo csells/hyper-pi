@@ -233,7 +233,7 @@ These features have clear value but are deferred to keep the initial build focus
 - **R-NR-10: Structured handoff protocol.** A JSON schema for inter-agent task delegation (replacing natural language messages with typed payloads like `{ intent: "schema_update", diff: "..." }`).
 
 #### Infrastructure & Deployment
-- **R-NR-11: Hypivisor persistence.** Durable storage for the node registry so the hypivisor can restart without losing node metadata, session history, and agent statistics. See `plans/hypivisor-persistence.md`.
+- **R-NR-11: Hypivisor persistence.** Durable storage for the node registry so the hypivisor can restart without losing node metadata, session history, and agent statistics. See `specs/hypivisor-persistence.md`.
 - **R-NR-12: Secure tunneling.** Built-in or recommended tunnel integration (Tailscale, Cloudflare Tunnel, ngrok) so the hypivisor and Pi-DE are accessible from anywhere without manual network configuration. The foundation must work solidly on localhost first.
 - **R-NR-13: One-command deployment.** `npx hyper-pi` brings up the hypivisor, opens Pi-DE, and configures the extension — replacing the current four-step setup.
 
