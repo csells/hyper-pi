@@ -27,3 +27,10 @@ pi-de/dist/
 # TypeScript
 pi-socket/dist/
 *.tsbuildinfo
+
+# Stale build artifacts (outDir is dist/, not root)
+pi-socket/*.js
+pi-socket/*.js.map
+pi-socket/*.d.ts
+pi-socket/*.d.ts.map
+!pi-socket/eslint.config.js
