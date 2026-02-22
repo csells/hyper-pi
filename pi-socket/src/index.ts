@@ -36,10 +36,13 @@ export default function piSocket(pi: ExtensionAPI) {
   let wss: WebSocketServer | null = null;
   let hypivisorWs: WebSocket | null = null;
   let hypivisorUrlValid = true;
+  let hypivisorConnected = false;
   let clientCount = 0;
+  let reconnectDelay = 0;
 
   const startPort = parseInt(process.env.PI_SOCKET_PORT || "8080", 10);
   const reconnectMs = parseInt(process.env.PI_SOCKET_RECONNECT_MS || "5000", 10);
+  const reconnectMaxMs = 5 * 60 * 1000; // cap at 5 minutes
   const hypivisorUrl = process.env.HYPIVISOR_WS || "ws://localhost:31415/ws";
   const hypiToken = process.env.HYPI_TOKEN || "";
 
@@ -159,11 +162,20 @@ export default function piSocket(pi: ExtensionAPI) {
         },
       };
       ws.send(JSON.stringify(rpc));
+      hypivisorConnected = true;
+      reconnectDelay = 0;
       log.info("hypivisor", "registered", { nodeId, port });
     }));
 
     ws.on("close", () => {
-      log.warn("hypivisor", "disconnected, will reconnect", { reconnectMs });
+      const wasConnected = hypivisorConnected;
+      hypivisorConnected = false;
+      if (wasConnected) {
+        // Lost an established connection — worth logging.
+        log.warn("hypivisor", "disconnected, will reconnect");
+      }
+      // First attempt or still retrying — silent. The initial
+      // "extension loaded" entry already shows the target URL.
       scheduleReconnect(port);
     });
 
@@ -173,9 +185,13 @@ export default function piSocket(pi: ExtensionAPI) {
   }
 
   function scheduleReconnect(port: number): void {
+    // Exponential backoff: 5s → 10s → 20s → ... → 5m cap
+    reconnectDelay = reconnectDelay === 0
+      ? reconnectMs
+      : Math.min(reconnectDelay * 2, reconnectMaxMs);
     setTimeout(boundary("reconnect", () => {
       connectToHypivisor(port);
-    }), reconnectMs);
+    }), reconnectDelay);
   }
 }
 
