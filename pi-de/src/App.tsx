@@ -8,6 +8,58 @@ import type { NodeInfo } from "./types";
 import "@mariozechner/pi-web-ui/app.css";
 import "@mariozechner/pi-web-ui";
 
+/**
+ * Fix Lit class-field-shadowing on pi-web-ui custom elements.
+ *
+ * pi-web-ui uses native ES2022 class field declarations (e.g. `session;`)
+ * which use [[Define]] semantics in the browser. These overwrite Lit's
+ * reactive prototype accessors. Lit dev mode detects this and throws in
+ * performUpdate(), preventing the component from rendering.
+ *
+ * The class fields are set in the constructor (before any callback), so
+ * we can't intercept them. Instead, we patch Lit's ReactiveElement base
+ * class to handle shadowed properties the same way production Lit does:
+ * save the own-property values, delete them to expose the prototype
+ * accessors, then restore via the setters.
+ */
+{
+  // Find Lit's ReactiveElement base class from any registered pi-web-ui element
+  const AnyLitCtor = customElements.get("agent-interface") as
+    | (new () => HTMLElement) & { elementProperties?: Map<string, unknown> }
+    | undefined;
+  if (AnyLitCtor) {
+    // Walk up the prototype chain to find ReactiveElement (has elementProperties)
+    let Base = AnyLitCtor;
+    while (Base && !Object.getOwnPropertyDescriptor(Base.prototype, "performUpdate")) {
+      Base = Object.getPrototypeOf(Base);
+    }
+    if (Base?.prototype?.performUpdate) {
+      const origPerformUpdate = Base.prototype.performUpdate;
+      Base.prototype.performUpdate = function (this: HTMLElement) {
+        // Before first update, fix shadowed class fields (mirrors Lit production _$E_)
+        const ctor = this.constructor as { elementProperties?: Map<string, unknown> };
+        if (ctor.elementProperties) {
+          const saved = new Map<string, unknown>();
+          const obj = this as unknown as Record<string, unknown>;
+          for (const prop of ctor.elementProperties.keys()) {
+            if (this.hasOwnProperty(prop)) {
+              saved.set(prop as string, obj[prop as string]);
+              delete obj[prop as string];
+            }
+          }
+          if (saved.size > 0) {
+            // Restore through Lit's prototype setters
+            for (const [k, v] of saved) {
+              obj[k] = v;
+            }
+          }
+        }
+        return origPerformUpdate.call(this);
+      };
+    }
+  }
+}
+
 const HYPI_TOKEN = import.meta.env.VITE_HYPI_TOKEN || "";
 const HYPIVISOR_PORT = parseInt(import.meta.env.VITE_HYPIVISOR_PORT || "31415", 10);
 
@@ -18,6 +70,8 @@ export default function App() {
 
   const [showSpawnModal, setShowSpawnModal] = useState(false);
   const agentInterfaceRef = useRef<HTMLElement | null>(null);
+
+
 
   // Keep activeNode status in sync with roster
   useEffect(() => {

@@ -61,6 +61,17 @@ The `harden-pi-socket` skill (`.pi/skills/harden-pi-socket/`) closes gaps in the
 
 **The log should have zero `needsHardening` entries in a healthy system.** Each entry represents a gap in the inner layer. Run `/skill:harden-pi-socket` to process new errors.
 
+## Browser Testing with Surf
+
+When using `surf` for browser automation and testing:
+
+- **Never use `surf tab.new`** — it spawns new browser windows/tabs that clutter the user's browser.
+- **Always use `surf navigate <url>`** to reuse the current tab.
+- **Name a tab once** with `surf tab.name --tab-id <id> pide` and then `surf tab.switch pide` to return to it.
+- **Use `surf console --level error`** to check for runtime errors after every navigation and interaction.
+- **Use `surf screenshot`** to visually verify rendering — don't trust that "no errors" means "it works."
+- **Start background services with `tmux`**, not `nohup` or `&` (which get killed by bash tool timeouts).
+
 ## Architecture Best Practices
 
 - **TDD** — write tests first; code isn't done until tests pass.

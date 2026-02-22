@@ -12,10 +12,6 @@ export default defineConfig({
       // pi-ai bundles Node-only providers that import "stream" — stub it.
       stream: "stream-browserify",
     },
-    // Lit's development exports throw on class-field-shadowing (a check
-    // that pi-web-ui's AgentInterface fails). The production build handles
-    // it gracefully via _$E_(). Use production Lit in dev mode.
-    conditions: ["browser", "default"],
   },
   build: {
     rollupOptions: {
@@ -50,6 +46,7 @@ export default defineConfig({
     // inclusion for ESM named imports to work at runtime.
     exclude: [
       "@mariozechner/pi-ai",
+      "@mariozechner/pi-web-ui",
       "@aws-sdk/client-bedrock-runtime",
       "@smithy/node-http-handler",
     ],
@@ -58,11 +55,22 @@ export default defineConfig({
       "@mariozechner/pi-ai > p-retry",
       "@mariozechner/pi-ai > ajv",
       "@mariozechner/pi-ai > ajv-formats",
-      "@lmstudio/lms-isomorphic",
+      "@mariozechner/pi-web-ui > @lmstudio/sdk",
+      "@mariozechner/pi-web-ui > docx-preview",
+      "@mariozechner/pi-web-ui > jszip",
+      "@mariozechner/pi-web-ui > lucide",
+      "@mariozechner/pi-web-ui > xlsx",
+      "highlight.js",
+      "highlight.js/lib/core",
+      "highlight.js/lib/languages/bash",
+      "highlight.js/lib/languages/css",
+      "highlight.js/lib/languages/javascript",
+      "highlight.js/lib/languages/json",
+      "highlight.js/lib/languages/python",
+      "highlight.js/lib/languages/sql",
+      "highlight.js/lib/languages/typescript",
+      "highlight.js/lib/languages/xml",
     ],
-    esbuildOptions: {
-      // esnext preserves native class fields — no __publicField helpers.
-      target: "esnext",
-    },
+
   },
 });

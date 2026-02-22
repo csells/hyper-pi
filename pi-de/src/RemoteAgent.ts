@@ -89,6 +89,11 @@ export class RemoteAgent {
 
   subscribe(fn: Listener): () => void {
     this.listeners.add(fn);
+    // If we already have messages (init_state arrived before subscription),
+    // emit agent_end so the subscriber renders the current state immediately.
+    if (this._state.messages.length > 0) {
+      queueMicrotask(() => fn({ type: "agent_end", messages: this._state.messages }));
+    }
     return () => this.listeners.delete(fn);
   }
 
