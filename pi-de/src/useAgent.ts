@@ -90,8 +90,8 @@ export function useAgent(activeNode: NodeInfo | null): UseAgentReturn {
       return () => clearTimeout(retryTimer);
     };
 
-    ws.onerror = (err) => {
-      console.error("[Pi-DE] Agent WebSocket error:", err);
+    ws.onerror = () => {
+      // Suppress console noise — onclose handles reconnect
     };
 
     return () => {

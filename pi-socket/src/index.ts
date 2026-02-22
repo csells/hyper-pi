@@ -26,8 +26,7 @@ export default function piSocket(pi: ExtensionAPI) {
   pi.on("session_start", async (_event, ctx) => {
     const port = await portfinder.getPortPromise({ port: startPort });
     wss = new WebSocketServer({ port });
-    ctx.ui.notify(`[pi-socket] ws://localhost:${port}`, "info");
-    log.info("WebSocket server started", { port, nodeId });
+    log.info(`Listening on ws://localhost:${port}`);
 
     wss.on("connection", (ws) => {
       log.info("Client connected");
@@ -115,8 +114,7 @@ export default function piSocket(pi: ExtensionAPI) {
     }
 
     hypivisorWs.on("open", () => {
-      ctx.ui.notify("[pi-socket] Connected to hypivisor", "info");
-      log.info("Connected to hypivisor", { url: hypivisorUrl });
+      log.info("Connected to hypivisor");
 
       const rpc: RpcRequest = {
         id: "reg",
@@ -132,18 +130,16 @@ export default function piSocket(pi: ExtensionAPI) {
       hypivisorWs!.send(JSON.stringify(rpc));
     });
 
-    hypivisorWs.on("close", (code) => {
-      log.warn("Hypivisor connection closed", { code });
+    hypivisorWs.on("close", () => {
       scheduleReconnect(port, ctx);
     });
 
-    hypivisorWs.on("error", (err) => {
-      log.error("Hypivisor WebSocket error", err);
+    hypivisorWs.on("error", () => {
+      // Suppress — onclose handles reconnect
     });
   }
 
   function scheduleReconnect(port: number, ctx: { ui: { notify: (msg: string, level?: "info" | "warning" | "error") => void } }) {
-    log.info("Scheduling hypivisor reconnect", { delayMs: reconnectMs });
     setTimeout(() => connectToHypivisor(port, ctx), reconnectMs);
   }
 }

@@ -72,9 +72,8 @@ export function useHypivisor(port: number, token: string): UseHypivisorReturn {
         reconnectTimer = setTimeout(connect, 5000);
       };
 
-      ws.onerror = (err) => {
-        console.error("[Pi-DE] Hypivisor WebSocket error:", err);
-        setStatus("error");
+      ws.onerror = () => {
+        // Suppress console noise — onclose handles reconnect
       };
     }
 

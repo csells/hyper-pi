@@ -8,14 +8,13 @@ const HYPI_TOKEN = import.meta.env.VITE_HYPI_TOKEN || "";
 const HYPIVISOR_PORT = parseInt(import.meta.env.VITE_HYPIVISOR_PORT || "31415", 10);
 
 export default function App() {
-  const { status: hvStatus, nodes, wsRef: hvWsRef, setNodes } = useHypivisor(HYPIVISOR_PORT, HYPI_TOKEN);
+  const { status: hvStatus, nodes, wsRef: hvWsRef } = useHypivisor(HYPIVISOR_PORT, HYPI_TOKEN);
   const [activeNode, setActiveNode] = useState<NodeInfo | null>(null);
   const agent = useAgent(activeNode);
 
   const [showSpawnModal, setShowSpawnModal] = useState(false);
-  const [showInspector, setShowInspector] = useState(false);
   const [inputText, setInputText] = useState("");
-  const chatEndRef = useRef<HTMLDivElement>(null);
+  const chatAreaRef = useRef<HTMLDivElement>(null);
 
   // Keep activeNode status in sync with roster
   useEffect(() => {
@@ -30,7 +29,8 @@ export default function App() {
 
   // Auto-scroll chat
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const el = chatAreaRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
   }, [agent.messages]);
 
   const handleSend = () => {
@@ -44,12 +44,8 @@ export default function App() {
   const projectName = (cwd: string) =>
     cwd.split(/[/\\]/).filter(Boolean).pop() ?? cwd;
 
-  const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
-
   return (
-    <div
-      className={`pi-de-layout ${activeNode ? "agent-selected" : ""} ${!activeNode ? "no-inspector" : ""}`}
-    >
+    <div className="pi-de-layout">
       {/* ── LEFT: Roster ─────────────────────────────────── */}
       <div className="sidebar roster-pane">
         <h2>Hyper-Pi Mesh</h2>
@@ -103,14 +99,6 @@ export default function App() {
           <>
             <div className="stage-header">
               <h3>{activeNode.cwd}</h3>
-              {isMobile && (
-                <button
-                  className="btn-inspector-toggle"
-                  onClick={() => setShowInspector(!showInspector)}
-                >
-                  🔧
-                </button>
-              )}
               {agent.status !== "connected" && (
                 <span className="agent-status">
                   {agent.status === "connecting" && "Connecting…"}
@@ -121,14 +109,7 @@ export default function App() {
               )}
             </div>
 
-            {agent.historyTruncated && (
-              <div className="truncation-notice">
-                Showing recent history. Older messages omitted due to
-                conversation length.
-              </div>
-            )}
-
-            <div className="chat-area">
+            <div className="chat-area" ref={chatAreaRef}>
               {agent.messages.map((msg, i) => (
                 <div key={i} className={`chat-msg chat-${msg.role}`}>
                   {msg.role === "user" && (
@@ -140,7 +121,6 @@ export default function App() {
                   <div className="msg-content">{msg.content}</div>
                 </div>
               ))}
-              <div ref={chatEndRef} />
             </div>
 
             <div className="input-bar">
@@ -170,26 +150,6 @@ export default function App() {
           </div>
         )}
       </div>
-
-      {/* ── RIGHT: Inspector ─────────────────────────────── */}
-      {activeNode && (
-        <div
-          className={`sidebar inspector-pane ${isMobile ? "inspector-drawer" : ""} ${showInspector ? "open" : ""}`}
-        >
-          <h2>Loaded Tools</h2>
-          <div className="tool-list">
-            {agent.tools.length === 0 && (
-              <p className="empty">No tools loaded.</p>
-            )}
-            {agent.tools.map((tool) => (
-              <div key={tool.name} className="tool-card">
-                <strong>{tool.name}</strong>
-                <p>{tool.description}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* ── Spawn Modal ──────────────────────────────────── */}
       {showSpawnModal && hvWsRef.current && (

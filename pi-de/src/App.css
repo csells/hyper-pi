@@ -28,13 +28,11 @@ body {
 /* ── 3-Pane IDE Grid ───────────────────────────────────────── */
 .pi-de-layout {
   display: grid;
-  grid-template-columns: 280px 1fr 280px;
+  grid-template-columns: 280px 1fr;
+  grid-template-rows: 100vh;
   height: 100vh;
   width: 100vw;
-}
-
-.pi-de-layout.no-inspector {
-  grid-template-columns: 280px 1fr;
+  overflow: hidden;
 }
 
 /* ── Panels (shared) ───────────────────────────────────────── */
@@ -199,6 +197,8 @@ body {
   flex-direction: column;
   background-color: var(--bg-dark);
   height: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .stage-header {
