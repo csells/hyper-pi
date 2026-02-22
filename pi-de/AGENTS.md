@@ -15,3 +15,11 @@ npm run lint    # Type-check
 
 - `VITE_HYPI_TOKEN` — pre-shared key matching hypivisor's HYPI_TOKEN
 - `VITE_HYPIVISOR_PORT` — hypivisor port (default: 31415)
+
+## Key files
+
+| File | Purpose |
+|------|---------|
+| `src/App.tsx` | Root component with three-pane layout |
+| `src/useHypivisor.ts` | Hook: connects to hypivisor WebSocket, manages node roster |
+| `src/useAgent.ts` | Hook: connects to agent via hypivisor proxy (`/ws/agent/{nodeId}`) |

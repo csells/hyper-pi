@@ -1,6 +1,6 @@
 # hypivisor
 
-Rust daemon (Axum + Tokio) serving as the Hyper-Pi central registry. Single WebSocket endpoint at `/ws`, pure JSON-RPC protocol. Default port 31415.
+Rust daemon using asupersync (structured concurrency runtime) serving as the Hyper-Pi central registry. WebSocket endpoints at `/ws` (registry) and `/ws/agent/{nodeId}` (proxy). Default port 31415.
 
 ## Commands
 
@@ -16,3 +16,21 @@ cargo clippy           # Lint
 ## Environment
 
 - `HYPI_TOKEN` — pre-shared key for authentication (optional)
+- `RUST_LOG` — logging filter (default: `hypivisor=info`)
+
+## Source modules
+
+| File | Purpose |
+|------|---------|
+| `src/main.rs` | Entry point, WebSocket handling, proxy relay |
+| `src/state.rs` | `AppState`, `NodeInfo`, `Registry` types |
+| `src/rpc.rs` | JSON-RPC dispatch (register, list_nodes, list_directories, spawn_agent) |
+| `src/auth.rs` | Token-based authentication |
+| `src/fs_browser.rs` | Directory listing for spawn UI |
+| `src/spawn.rs` | Agent process spawning |
+| `src/cleanup.rs` | Stale node removal |
+
+## WebSocket routes
+
+- `/ws` — Registry. pi-socket agents connect here to register and receive broadcast events.
+- `/ws/agent/{nodeId}` — Proxy. Pi-DE connects here; hypivisor relays bidirectionally to the agent's local WebSocket port.

@@ -7,8 +7,9 @@ Decentralized control plane for pi coding agents: a WebSocket extension (pi-sock
 | Component | Tech | Location |
 |-----------|------|----------|
 | pi-socket | TypeScript (pi extension) | `pi-socket/` |
-| hypivisor | Rust (Axum + Tokio) | `hypivisor/` |
+| hypivisor | Rust (asupersync) | `hypivisor/` |
 | Pi-DE | React + Vite + TypeScript | `pi-de/` |
+| integration tests | TypeScript (vitest) | `integration-tests/` |
 
 ## Key Constraint
 
@@ -29,6 +30,36 @@ All design decisions, requirements, and architecture are in `specs/`:
 Read the relevant spec before implementing or modifying any component.
 
 Each component has its own `AGENTS.md` with build commands.
+
+## Self-Hardening Architecture
+
+pi-socket runs inside pi's Node.js process. An unhandled exception in the extension kills the host pi agent. To prevent this while maintaining visibility into bugs, pi-socket uses a **two-layer error architecture** with a **continuous hardening loop**.
+
+### Two-layer error handling
+
+- **Inner layer**: Known errors handled at their source with specific logic — `safeSerialize()` for non-serializable data, `readyState` guards before `ws.send()`, `hypivisorUrlValid` flag for bad URLs, defensive property access in `buildInitState()`.
+- **Outer layer**: `boundary()` wrapper on every Node event-loop callback (`wss.on`, `ws.on`, `setTimeout`). Catches unanticipated errors, logs them with `needsHardening: true`, and never throws.
+
+Note: `pi.on()` handlers do NOT need wrapping — pi's `ExtensionRunner.emit()` already catches errors from extension handlers.
+
+### Operational log
+
+`~/.pi/logs/pi-socket.jsonl` — structured JSONL with every significant event:
+- `info`: startup, connections, registrations
+- `warn`: expected degraded conditions (reconnecting, client dropped)
+- `error` + `needsHardening: true`: unanticipated errors caught by `boundary()`
+
+### Hardening loop
+
+The `harden-pi-socket` skill (`.pi/skills/harden-pi-socket/`) closes gaps in the inner layer:
+
+1. Reads `needsHardening` errors from the operational log
+2. Cross-references the **hardening ledger** (`.pi/skills/harden-pi-socket/ledger.jsonl`) for past fix attempts
+3. For recurring errors, reads prior fix commits with `git show` to learn what was tried
+4. Proposes a targeted inner-layer fix that eliminates the error class
+5. Records the fix in the ledger with git commit SHA, files changed, status, and root cause notes
+
+**The log should have zero `needsHardening` entries in a healthy system.** Each entry represents a gap in the inner layer. Run `/skill:harden-pi-socket` to process new errors.
 
 ## Architecture Best Practices
 
