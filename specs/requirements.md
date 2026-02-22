@@ -221,16 +221,32 @@ These items were discussed during design but are explicitly **not** in scope for
 ### 5.2 Deferred to Future Phases
 These features have clear value but are deferred to keep the initial build focused.
 
-- **R-NR-4: Agent-to-agent communication.** Integration with `pi-messenger` (Nico Bailon) for inter-agent messaging and file reservation. Prerequisite: working single-agent Pi-DE.
-- **R-NR-5: Cross-machine agent coordination.** Syncing `pi-messenger` state directories across machines via Syncthing/Tailscale for distributed agent swarms.
-- **R-NR-6: Swarm status visualization.** Topology graph showing agent-to-agent message flow and file reservations in real time.
-- **R-NR-7: A2UI (Agent-to-User Interface).** Agents emitting structured JSON payloads that Pi-DE renders as interactive widgets (diff viewers, approval buttons, schema comparisons) rather than raw markdown.
-- **R-NR-8: Semantic zooming / progressive disclosure.** Collapsing successful tool runs into a single checkmark in the Chat Stage; expanding on click. Default view shows intent, not implementation.
-- **R-NR-9: Agent Cards.** Each agent publishing a JSON capability manifest (`{ skills, status, currentTask }`) for deterministic task routing by other agents.
-- **R-NR-10: Shared semantic memory.** A lightweight vector DB (e.g., LanceDB) for cross-agent code search, so agents can query what other agents have written without direct communication.
-- **R-NR-11: Structured handoff protocol.** A JSON schema for inter-agent task delegation (replacing natural language messages with typed payloads like `{ intent: "schema_update", diff: "..." }`).
-- **R-NR-12: Ephemeral sandboxing.** Spawning agents in Docker containers for isolation, with MCP-based tool boundaries.
-- **R-NR-13: Watchdog overseer.** A lightweight monitoring agent that watches active agents for infinite loops, repeated errors, or runaway token usage, and can interrupt or kill stuck agents.
-- **R-NR-14: Richer agent status.** Extending node status beyond `active`/`offline` to include `idle`, `working`, `stuck` — derived from pi's lifecycle events (`agent_start`, `agent_end`, tool activity).
-- **R-NR-15: Session browsing from Pi-DE.** Navigating pi's session tree and browsing previous sessions from the web UI (using `ctx.sessionManager` APIs).
-- **R-NR-16: Hypivisor persistence.** Optional durable storage for the node registry so the hypivisor can restart without losing node metadata.
+#### Orchestration & Multi-Agent
+- **R-NR-4: Agent-to-agent communication.** Integration with [pi-messenger](https://github.com/nicobailon/pi-messenger) for inter-agent messaging and file reservation. Prerequisite: working single-agent Pi-DE.
+- **R-NR-5: Ensemble orchestration.** Integration with [NTM (Neural Turing Machine)](https://github.com/dicklesworthstone/ntm) ensemble orchestration patterns for higher-level multi-agent task planning, delegation, and review workflows.
+- **R-NR-6: Cross-machine agent coordination.** Syncing `pi-messenger` state directories across machines via Syncthing/Tailscale for distributed agent swarms. The hypivisor aggregates agents from all machines into a single registry.
+- **R-NR-7: Agent discovery.** Agents query the hypivisor for other running agents by project, skill, or status. Enables dynamic delegation — an agent working on the backend can discover and message the frontend agent without human routing.
+- **R-NR-8: Agent Cards.** Each agent publishing a JSON capability manifest (`{ skills, status, currentTask, project }`) for deterministic task routing by other agents and for Pi-DE to show richer roster information.
+
+#### Shared Knowledge
+- **R-NR-9: Shared semantic memory.** Integration with [CASS Memory System](https://github.com/Dicklesworthstone/cass_memory_system) for cross-agent knowledge sharing. Agents write what they've learned (API changes, architecture decisions, test results) and other agents query it — without direct communication.
+- **R-NR-10: Structured handoff protocol.** A JSON schema for inter-agent task delegation (replacing natural language messages with typed payloads like `{ intent: "schema_update", diff: "..." }`).
+
+#### Infrastructure & Deployment
+- **R-NR-11: Hypivisor persistence.** Durable storage for the node registry so the hypivisor can restart without losing node metadata, session history, and agent statistics. See `plans/hypivisor-persistence.md`.
+- **R-NR-12: Secure tunneling.** Built-in or recommended tunnel integration (Tailscale, Cloudflare Tunnel, ngrok) so the hypivisor and Pi-DE are accessible from anywhere without manual network configuration. The foundation must work solidly on localhost first.
+- **R-NR-13: One-command deployment.** `npx hyper-pi` brings up the hypivisor, opens Pi-DE, and configures the extension — replacing the current four-step setup.
+
+#### Pi-DE Enhancements
+- **R-NR-14: Swarm status visualization.** Topology graph showing agent-to-agent message flow and file reservations in real time.
+- **R-NR-15: A2UI (Agent-to-User Interface).** Agents emitting structured JSON payloads that Pi-DE renders as interactive widgets (diff viewers, approval buttons, schema comparisons) rather than raw markdown.
+- **R-NR-16: Semantic zooming / progressive disclosure.** Collapsing successful tool runs into a single checkmark in the Chat Stage; expanding on click. Default view shows intent, not implementation.
+- **R-NR-17: Task management.** Assign tasks to agents from Pi-DE, track progress, see completion status. Turns Pi-DE from a viewer into a control plane.
+- **R-NR-18: Session browsing from Pi-DE.** Navigating pi's session tree and browsing previous sessions from the web UI (using `ctx.sessionManager` APIs).
+- **R-NR-19: Notifications.** Push notifications (browser, mobile) when agents complete tasks, encounter errors, or need human input.
+
+#### Reliability & Observability
+- **R-NR-20: Self-hardening pattern (generalized).** Extract the two-layer error architecture (inner/outer) with structured logging, hardening skill, and hardening ledger into a reusable `pi-harden` extension usable by ANY project. See `plans/pi-harden-extension.md`.
+- **R-NR-21: Richer agent status.** Extending node status beyond `active`/`offline` to include `idle`, `working`, `stuck` — derived from pi's lifecycle events (`agent_start`, `agent_end`, tool activity).
+- **R-NR-22: Watchdog overseer.** A lightweight monitoring agent that watches active agents for infinite loops, repeated errors, or runaway token usage, and can interrupt or kill stuck agents.
+- **R-NR-23: Ephemeral sandboxing.** Spawning agents in Docker containers for isolation, with MCP-based tool boundaries.
