@@ -44,47 +44,56 @@ export function useAgent(activeNode: NodeInfo | null): UseAgentReturn {
     remoteAgent.reset();
     setHistoryTruncated(false);
 
-    // Connect via hypivisor proxy — single port, no direct agent access needed
-    const hypivisorHost = window.location.hostname;
-    const hypivisorPort = import.meta.env.VITE_HYPIVISOR_PORT || "31415";
-    const token = import.meta.env.VITE_HYPI_TOKEN || "";
-    const tokenParam = token ? `?token=${encodeURIComponent(token)}` : "";
-    const ws = new WebSocket(
-      `ws://${hypivisorHost}:${hypivisorPort}/ws/agent/${encodeURIComponent(activeNode.id)}${tokenParam}`,
-    );
-    wsRef.current = ws;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let closed = false; // set by cleanup to stop reconnects
+    const nodeId = activeNode.id; // capture for closures (activeNode is non-null here)
 
-    ws.onopen = () => {
-      setStatus("connected");
-      remoteAgent.connect(ws);
-    };
+    function connect() {
+      // Connect via hypivisor proxy — single port, no direct agent access needed
+      const hypivisorHost = window.location.hostname;
+      const hypivisorPort = import.meta.env.VITE_HYPIVISOR_PORT || "31415";
+      const token = import.meta.env.VITE_HYPI_TOKEN || "";
+      const tokenParam = token ? `?token=${encodeURIComponent(token)}` : "";
+      const ws = new WebSocket(
+        `ws://${hypivisorHost}:${hypivisorPort}/ws/agent/${encodeURIComponent(nodeId)}${tokenParam}`,
+      );
+      wsRef.current = ws;
 
-    ws.onmessage = (event) => {
-      // Check for init_state to track truncation at hook level
-      const data = JSON.parse(event.data);
-      if (data.type === "init_state") {
-        handleInitState(data as InitStateEvent);
-      }
-      // RemoteAgent processes all events via its own listener registered in connect()
-    };
+      ws.onopen = () => {
+        setStatus("connected");
+        remoteAgent.connect(ws);
+      };
 
-    ws.onclose = () => {
-      setStatus("disconnected");
-      remoteAgent.disconnect();
-      setTimeout(() => {
-        const current = activeNodeRef.current;
-        if (current?.id === activeNode.id && current.status === "active") {
-          setStatus("connecting");
-        } else {
-          setStatus("offline");
+      ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        if (data.type === "init_state") {
+          handleInitState(data as InitStateEvent);
         }
-      }, 5000);
-    };
+      };
 
-    ws.onerror = () => {};
+      ws.onclose = () => {
+        if (closed) return;
+        // Don't clear messages on temporary disconnect — keep showing last state
+        setStatus("connecting");
+        reconnectTimer = setTimeout(() => {
+          const current = activeNodeRef.current;
+          if (current?.id === nodeId && current.status === "active") {
+            connect();
+          } else {
+            setStatus("offline");
+          }
+        }, 3000);
+      };
+
+      ws.onerror = () => {};
+    }
+
+    connect();
 
     return () => {
-      ws.close();
+      closed = true;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      wsRef.current?.close();
       remoteAgent.disconnect();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps -- activeNode ref avoids reconnect loops

@@ -103,7 +103,15 @@ export default function piSocket(pi: ExtensionAPI) {
   });
 
   pi.on("tool_execution_end", (event) => {
-    broadcast({ type: "tool_end", name: event.toolName, isError: event.isError });
+    // Extract text content from tool result for display in Pi-DE
+    let result: string | undefined;
+    if (event.result?.content) {
+      const texts = (event.result.content as Array<{ type: string; text?: string }>)
+        .filter((b) => b.type === "text" && b.text)
+        .map((b) => b.text);
+      if (texts.length > 0) result = texts.join("\n");
+    }
+    broadcast({ type: "tool_end", name: event.toolName, isError: event.isError, result });
   });
 
   pi.on("message_start", (event) => {

@@ -72,10 +72,19 @@ export function buildInitState(
         }
       }
     } else if (role === "toolResult" && typeof m.toolName === "string") {
+      // Extract text content from tool result
+      let result: string | undefined;
+      if (Array.isArray(m.content)) {
+        const texts = (m.content as Array<{ type: string; text?: string }>)
+          .filter((b: { type: string; text?: string }) => b.type === "text" && b.text)
+          .map((b: { type: string; text?: string }) => b.text);
+        if (texts.length > 0) result = texts.join("\n");
+      }
       allEvents.push({
         type: "tool_end",
         name: m.toolName,
         isError: m.isError === true,
+        result,
       });
     }
   }

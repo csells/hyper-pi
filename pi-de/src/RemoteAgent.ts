@@ -191,7 +191,7 @@ export class RemoteAgent {
         this.handleToolStart(event.name, event.args);
         break;
       case "tool_end":
-        this.handleToolEnd(event.name, event.isError);
+        this.handleToolEnd(event.name, event.isError, event.result);
         break;
       case "message_end":
         this.handleMessageEnd(event.role);
@@ -327,7 +327,7 @@ export class RemoteAgent {
     });
   }
 
-  private handleToolEnd(name: string, isError: boolean): void {
+  private handleToolEnd(name: string, isError: boolean, result?: string): void {
     // Find the matching tool call in the streaming message
     const toolCall = this.streamingMessage?.content
       .filter((b): b is ToolCall => b.type === "toolCall" && b.name === name)
@@ -340,12 +340,12 @@ export class RemoteAgent {
     pending.delete(toolCallId);
     this._state = { ...this._state, pendingToolCalls: pending };
 
-    // Create a tool result message
+    // Create a tool result message with actual content
     const toolResult: ToolResultMessage = {
       role: "toolResult",
       toolCallId,
       toolName: name,
-      content: [{ type: "text", text: isError ? "Error" : "Done" }],
+      content: [{ type: "text", text: result ?? (isError ? "Error" : "Done") }],
       isError,
       timestamp: Date.now(),
     };
@@ -499,7 +499,7 @@ function rebuildMessages(events: HistoryEvent[]): AgentMessage[] {
             role: "toolResult",
             toolCallId: tc.id,
             toolName: ev.name,
-            content: [{ type: "text", text: ev.isError ? "Error" : "Done" }],
+            content: [{ type: "text", text: ev.result ?? (ev.isError ? "Error" : "Done") }],
             isError: ev.isError,
             timestamp: Date.now(),
           } satisfies ToolResultMessage);

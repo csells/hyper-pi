@@ -65,6 +65,7 @@ export interface ToolEndEvent {
   type: "tool_end";
   name: string;
   isError: boolean;
+  result?: string;
 }
 
 export interface MessageStartEvent {

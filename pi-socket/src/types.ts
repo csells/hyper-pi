@@ -4,7 +4,7 @@ export type AgentEvent =
   | { type: "delta"; text: string }
   | { type: "thinking_delta"; text: string }
   | { type: "tool_start"; name: string; args: unknown }
-  | { type: "tool_end"; name: string; isError: boolean }
+  | { type: "tool_end"; name: string; isError: boolean; result?: string }
   | { type: "message_start"; role: string }
   | { type: "message_end"; role: string };
 
@@ -14,7 +14,7 @@ export type HistoryEvent =
   | { type: "delta"; text: string }
   | { type: "thinking_delta"; text: string }
   | { type: "tool_start"; name: string; args: unknown }
-  | { type: "tool_end"; name: string; isError: boolean };
+  | { type: "tool_end"; name: string; isError: boolean; result?: string };
 
 /** Tool metadata returned by pi.getAllTools() */
 export interface ToolInfo {
