@@ -3,9 +3,11 @@ export type AgentEvent =
   | { type: "init_state"; events: HistoryEvent[]; tools: ToolInfo[]; truncated?: boolean; totalEvents?: number }
   | { type: "delta"; text: string }
   | { type: "thinking_delta"; text: string }
+  | { type: "toolcall_start"; name: string; id: string }
+  | { type: "toolcall_delta"; id: string; argsDelta: string }
   | { type: "tool_start"; name: string; args: unknown }
   | { type: "tool_end"; name: string; isError: boolean; result?: string }
-  | { type: "message_start"; role: string }
+  | { type: "message_start"; role: string; content?: string }
   | { type: "message_end"; role: string };
 
 /** Individual events inside init_state.events */

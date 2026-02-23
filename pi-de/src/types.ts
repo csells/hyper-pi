@@ -32,6 +32,8 @@ export type AgentEvent =
   | InitStateEvent
   | DeltaEvent
   | ThinkingDeltaEvent
+  | ToolcallStartEvent
+  | ToolcallDeltaEvent
   | ToolStartEvent
   | ToolEndEvent
   | MessageStartEvent
@@ -55,6 +57,18 @@ export interface ThinkingDeltaEvent {
   text: string;
 }
 
+export interface ToolcallStartEvent {
+  type: "toolcall_start";
+  name: string;
+  id: string;
+}
+
+export interface ToolcallDeltaEvent {
+  type: "toolcall_delta";
+  id: string;
+  argsDelta: string;
+}
+
 export interface ToolStartEvent {
   type: "tool_start";
   name: string;
@@ -71,6 +85,7 @@ export interface ToolEndEvent {
 export interface MessageStartEvent {
   type: "message_start";
   role: string;
+  content?: string;
 }
 
 export interface MessageEndEvent {

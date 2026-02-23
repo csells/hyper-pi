@@ -105,10 +105,21 @@ export default function piSocket(pi: ExtensionAPI) {
   // pi catches errors — no wrapping needed.
 
   pi.on("message_update", (event) => {
-    if (event.assistantMessageEvent?.type === "text_delta") {
-      broadcast({ type: "delta", text: event.assistantMessageEvent.delta });
-    } else if (event.assistantMessageEvent?.type === "thinking_delta") {
-      broadcast({ type: "thinking_delta", text: event.assistantMessageEvent.delta });
+    const ame = event.assistantMessageEvent;
+    if (ame?.type === "text_delta") {
+      broadcast({ type: "delta", text: ame.delta });
+    } else if (ame?.type === "thinking_delta") {
+      broadcast({ type: "thinking_delta", text: ame.delta });
+    } else if (ame?.type === "toolcall_start") {
+      const tc = ame.partial.content[ame.contentIndex] as { name?: string; id?: string };
+      if (tc?.name && tc?.id) {
+        broadcast({ type: "toolcall_start", name: tc.name, id: tc.id });
+      }
+    } else if (ame?.type === "toolcall_delta") {
+      const tc = ame.partial.content[ame.contentIndex] as { id?: string };
+      if (tc?.id) {
+        broadcast({ type: "toolcall_delta", id: tc.id, argsDelta: ame.delta });
+      }
     }
   });
 
@@ -129,7 +140,21 @@ export default function piSocket(pi: ExtensionAPI) {
   });
 
   pi.on("message_start", (event) => {
-    broadcast({ type: "message_start", role: event.message.role });
+    const msg = event.message;
+    if (msg.role === "user") {
+      // Include user message content so Pi-DE can display it
+      const content = typeof msg.content === "string"
+        ? msg.content
+        : Array.isArray(msg.content)
+          ? (msg.content as Array<{ type: string; text?: string }>)
+              .filter((b) => b.type === "text" && b.text)
+              .map((b) => b.text)
+              .join("\n")
+          : undefined;
+      broadcast({ type: "message_start", role: "user", content });
+    } else {
+      broadcast({ type: "message_start", role: msg.role });
+    }
   });
 
   pi.on("message_end", (event) => {

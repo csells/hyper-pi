@@ -66,6 +66,8 @@ export class RemoteAgent {
   // Current streaming assistant message being built from deltas
   private streamingMessage: AssistantMessage | null = null;
   private toolCallCounter = 0;
+  private toolCallIdMap = new Map<string, string>();
+  private toolCallArgBuffers: Map<string, string> | null = null;
 
   // Required by AgentInterface (prevents it from overriding with proxy/key defaults)
   streamFn: unknown = () => {};
@@ -179,13 +181,19 @@ export class RemoteAgent {
         this.handleInitState(event as InitStateEvent);
         break;
       case "message_start":
-        this.handleMessageStart(event.role);
+        this.handleMessageStart(event.role, event.content);
         break;
       case "delta":
         this.handleDelta(event.text);
         break;
       case "thinking_delta":
         this.handleThinkingDelta(event.text);
+        break;
+      case "toolcall_start":
+        this.handleToolcallStart(event.name, event.id);
+        break;
+      case "toolcall_delta":
+        this.handleToolcallDelta(event.id, event.argsDelta);
         break;
       case "tool_start":
         this.handleToolStart(event.name, event.args);
@@ -211,16 +219,31 @@ export class RemoteAgent {
     };
     this.streamingMessage = null;
     this.toolCallCounter = 0;
+    this.toolCallIdMap.clear();
+    this.toolCallArgBuffers = null;
     this.emit({ type: "agent_end", messages: this._state.messages });
   }
 
-  private handleMessageStart(role: string): void {
+  private handleMessageStart(role: string, content?: string): void {
     if (role === "assistant") {
       this._state = { ...this._state, isStreaming: true };
       this.streamingMessage = makeEmptyAssistant();
       this.emit({ type: "agent_start" });
       this.emit({ type: "turn_start" });
       this.emit({ type: "message_start", message: this.streamingMessage });
+    } else if (role === "user" && content) {
+      // User message from the TUI — add to state so Pi-DE displays it
+      const userMessage: UserMessage = {
+        role: "user",
+        content,
+        timestamp: Date.now(),
+      };
+      this._state = {
+        ...this._state,
+        messages: [...this._state.messages, userMessage],
+      };
+      this.emit({ type: "message_start", message: userMessage });
+      this.emit({ type: "message_end", message: userMessage });
     }
   }
 
@@ -287,6 +310,85 @@ export class RemoteAgent {
     });
   }
 
+  /**
+   * toolcall_start: LLM output a tool call in the assistant message.
+   * Fires DURING the streaming message (before message_end).
+   * Adds a toolCall content block so pi-web-ui renders it inline.
+   */
+  private handleToolcallStart(name: string, id: string): void {
+    if (!this.streamingMessage) {
+      this._state = { ...this._state, isStreaming: true };
+      this.streamingMessage = makeEmptyAssistant();
+      this.emit({ type: "agent_start" });
+      this.emit({ type: "turn_start" });
+      this.emit({ type: "message_start", message: this.streamingMessage });
+    }
+
+    // Map the pi-native toolCallId to our internal counter for pairing
+    this.toolCallIdMap.set(id, id);
+
+    const toolCall: ToolCall = {
+      type: "toolCall",
+      id,
+      name,
+      arguments: {},
+    };
+    this.streamingMessage.content.push(toolCall);
+
+    const pending = new Set(this._state.pendingToolCalls);
+    pending.add(id);
+    this._state = { ...this._state, pendingToolCalls: pending };
+
+    this.emit({
+      type: "message_update",
+      message: this.streamingMessage,
+      assistantMessageEvent: {
+        type: "toolcall_start",
+        contentIndex: this.streamingMessage.content.length - 1,
+        partial: this.streamingMessage,
+      },
+    });
+  }
+
+  /**
+   * toolcall_delta: Incremental arguments JSON for a tool call being streamed.
+   */
+  private handleToolcallDelta(id: string, argsDelta: string): void {
+    if (!this.streamingMessage) return;
+    const toolCall = this.streamingMessage.content.find(
+      (b): b is ToolCall => b.type === "toolCall" && (b as ToolCall).id === id,
+    );
+    if (!toolCall) return;
+
+    // Accumulate the raw args JSON string; we'll parse it at tool_start
+    if (!this.toolCallArgBuffers) this.toolCallArgBuffers = new Map();
+    const existing = this.toolCallArgBuffers.get(id) ?? "";
+    this.toolCallArgBuffers.set(id, existing + argsDelta);
+
+    // Try to parse partial JSON into arguments for display
+    try {
+      toolCall.arguments = JSON.parse(this.toolCallArgBuffers.get(id)!) as Record<string, unknown>;
+    } catch {
+      // Partial JSON — leave arguments as-is until complete
+    }
+
+    this.emit({
+      type: "message_update",
+      message: this.streamingMessage,
+      assistantMessageEvent: {
+        type: "toolcall_delta",
+        contentIndex: this.streamingMessage.content.indexOf(toolCall),
+        delta: argsDelta,
+        partial: this.streamingMessage,
+      },
+    });
+  }
+
+  /**
+   * tool_start: Tool EXECUTION begins (fires after message_end).
+   * If toolcall_start already added the block, just mark it pending.
+   * Otherwise (history replay), create the block.
+   */
   private handleToolStart(name: string, args: unknown): void {
     if (!this.streamingMessage) {
       this._state = { ...this._state, isStreaming: true };
@@ -295,6 +397,30 @@ export class RemoteAgent {
       this.emit({ type: "turn_start" });
     }
 
+    // Check if toolcall_start already added a block for this tool.
+    // During live streaming: toolcall_start fires during the message,
+    // then tool_start fires after message_end for execution.
+    // During history replay: only tool_start fires (no toolcall_start).
+    const existing = this.streamingMessage.content.find(
+      (b): b is ToolCall =>
+        b.type === "toolCall" &&
+        (b as ToolCall).name === name &&
+        this._state.pendingToolCalls.has((b as ToolCall).id),
+    );
+
+    if (existing) {
+      // Already added by toolcall_start — just update args and emit execution event
+      if (args) existing.arguments = (args as Record<string, unknown>);
+      this.emit({
+        type: "tool_execution_start",
+        toolCallId: existing.id,
+        toolName: name,
+        args,
+      });
+      return;
+    }
+
+    // History replay path — create the block
     const toolCallId = `tc_${++this.toolCallCounter}`;
     const toolCall: ToolCall = {
       type: "toolCall",
