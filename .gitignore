@@ -55,6 +55,11 @@ hypivisor/target/
 # Vite
 pi-de/dist/
 
+# Coverage
+coverage/
+pi-de/coverage/
+pi-socket/coverage/
+
 # TypeScript
 pi-socket/dist/
 *.tsbuildinfo
