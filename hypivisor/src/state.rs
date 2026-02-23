@@ -15,6 +15,10 @@ pub struct NodeInfo {
     pub status: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub offline_since: Option<i64>,
+    /// Last time this node was seen alive (register or heartbeat ping).
+    /// Used by cleanup to detect "active" ghosts with dead TCP connections.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_seen: Option<i64>,
 }
 
 pub struct AppState {

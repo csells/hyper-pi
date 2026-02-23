@@ -375,6 +375,14 @@ fn handle_registry_ws(
                 }
             }
             Ok(Some(ReadResult::Ping(payload))) => {
+                // Update last_seen on heartbeat so cleanup can detect dead agents
+                if let Some(ref node_id) = registered_node_id {
+                    if let Ok(mut nodes) = state.nodes.write() {
+                        if let Some(node) = nodes.get_mut(node_id) {
+                            node.last_seen = Some(Utc::now().timestamp());
+                        }
+                    }
+                }
                 let mut w = writer.lock().unwrap();
                 if w.send_pong(payload).is_err() {
                     break;

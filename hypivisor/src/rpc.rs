@@ -1,6 +1,7 @@
 use crate::state::{NodeInfo, Registry};
 use crate::{fs_browser, spawn};
 use asupersync::Cx;
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::path::PathBuf;
@@ -66,6 +67,7 @@ fn handle_register(
     };
     node.status = "active".to_string();
     node.offline_since = None;
+    node.last_seen = Some(Utc::now().timestamp());
     let evicted: Vec<String>;
     {
         let mut nodes = state

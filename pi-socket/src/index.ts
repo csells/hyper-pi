@@ -42,6 +42,7 @@ export default function piSocket(pi: ExtensionAPI) {
   let reconnectDelay = 0;
   let shutdownRequested = false;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
 
   const startPort = parseInt(process.env.PI_SOCKET_PORT || "8080", 10);
   const reconnectMs = parseInt(process.env.PI_SOCKET_RECONNECT_MS || "5000", 10);
@@ -124,10 +125,14 @@ export default function piSocket(pi: ExtensionAPI) {
     log.info("pi-socket", "shutting down", { nodeId });
     shutdownRequested = true;
 
-    // Cancel any pending reconnect to prevent post-shutdown re-registration
+    // Cancel any pending reconnect/heartbeat to prevent post-shutdown activity
     if (reconnectTimer) {
       clearTimeout(reconnectTimer);
       reconnectTimer = null;
+    }
+    if (heartbeatInterval) {
+      clearInterval(heartbeatInterval);
+      heartbeatInterval = null;
     }
 
     // Deregister from hypivisor and wait for the message to flush before closing.
@@ -167,11 +172,15 @@ export default function piSocket(pi: ExtensionAPI) {
 
   // ── Hypivisor lifecycle ──────────────────────────────────────
 
-  /** Cleanly close the hypivisor WebSocket and cancel any pending reconnect. */
+  /** Cleanly close the hypivisor WebSocket and cancel any pending reconnect/heartbeat. */
   function teardownHypivisor(): void {
     if (reconnectTimer) {
       clearTimeout(reconnectTimer);
       reconnectTimer = null;
+    }
+    if (heartbeatInterval) {
+      clearInterval(heartbeatInterval);
+      heartbeatInterval = null;
     }
     if (hypivisorWs) {
       const oldWs = hypivisorWs;
@@ -217,9 +226,18 @@ export default function piSocket(pi: ExtensionAPI) {
       hypivisorConnected = true;
       reconnectDelay = 0;
       log.info("hypivisor", "registered", { nodeId, port });
+
+      // Start heartbeat so hypivisor can detect dead connections via last_seen
+      if (heartbeatInterval) clearInterval(heartbeatInterval);
+      heartbeatInterval = setInterval(() => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.ping();
+        }
+      }, 30_000);
     }));
 
     ws.on("close", () => {
+      if (heartbeatInterval) { clearInterval(heartbeatInterval); heartbeatInterval = null; }
       const wasConnected = hypivisorConnected;
       hypivisorConnected = false;
       if (wasConnected) {
