@@ -18,6 +18,37 @@ target/
 .DS_Store
 Thumbs.db
 
+# Agent tool config dirs (created by `npx skills add -g`)
+.agent/
+.agents/
+.claude/
+.cline/
+.codebuddy/
+.commandcode/
+.continue/
+.crush/
+.cursor/
+.factory/
+.goose/
+.junie/
+.kilocode/
+.kiro/
+.kode/
+.mcpjam/
+.mux/
+.neovate/
+.openhands/
+.pochi/
+.qoder/
+.qwen/
+.roo/
+.trae/
+.vibe/
+.windsurf/
+.zencoder/
+skills/
+skills-lock.json
+
 # Rust
 hypivisor/target/
 

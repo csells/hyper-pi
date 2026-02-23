@@ -13,6 +13,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "hyper-pi-protocol": "file:../hyper-pi-protocol",
     "portfinder": "^1.0.32",
     "ws": "^8.18.0"
   },
@@ -34,6 +35,8 @@
   ],
   "license": "MIT",
   "pi": {
-    "extensions": ["./src/index.ts"]
+    "extensions": [
+      "./src/index.ts"
+    ]
   }
 }

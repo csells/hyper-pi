@@ -17,7 +17,7 @@ export default function SpawnModal({ hvWs, onClose }: SpawnModalProps) {
   const loadDirs = useCallback(async () => {
     setError(null);
     try {
-      const result = await rpcCall(
+      const result = await rpcCall<{ current: string; directories: string[] }>(
         hvWs,
         "list_directories",
         currentPath ? { path: currentPath } : {},

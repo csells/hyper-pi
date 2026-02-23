@@ -4,12 +4,12 @@ Decentralized control plane for pi coding agents: a WebSocket extension (pi-sock
 
 ## Components
 
-| Component | Tech | Location |
-|-----------|------|----------|
-| pi-socket | TypeScript (pi extension) | `pi-socket/` |
-| hypivisor | Rust (asupersync) | `hypivisor/` |
-| Pi-DE | React + Vite + TypeScript | `pi-de/` |
-| integration tests | TypeScript (vitest) | `integration-tests/` |
+| Component         | Tech                      | Location             |
+| ----------------- | ------------------------- | -------------------- |
+| pi-socket         | TypeScript (pi extension) | `pi-socket/`         |
+| hypivisor         | Rust (asupersync)         | `hypivisor/`         |
+| Pi-DE             | React + Vite + TypeScript | `pi-de/`             |
+| integration tests | TypeScript (vitest)       | `integration-tests/` |
 
 ## Connection Architecture
 
@@ -28,6 +28,7 @@ Pi-DE connects exclusively to the hypivisor. The `/ws/agent/{nodeId}` endpoint p
 ### Event flow
 
 pi-socket broadcasts real-time events to all clients:
+
 - `delta` / `thinking_delta` — streaming LLM output
 - `toolcall_start` / `toolcall_delta` — LLM tool call construction (during assistant message)
 - `tool_start` / `tool_end` — tool execution (after assistant message)
@@ -69,6 +70,7 @@ Note: `pi.on()` handlers do NOT need wrapping — pi's `ExtensionRunner.emit()` 
 ### Operational log
 
 `~/.pi/logs/pi-socket.jsonl` — structured JSONL with every significant event:
+
 - `info`: startup, connections, registrations
 - `warn`: expected degraded conditions (reconnecting, client dropped)
 - `error` + `needsHardening: true`: unanticipated errors caught by `boundary()`
@@ -90,25 +92,46 @@ The user's browser tabs are THEIRS. You get ONE dedicated testing tab.
 - Use `surf --tab-id <ID> screenshot` to visually verify rendering — don't trust that "no errors" means "it works."
 - Start background services with `tmux`, not `nohup` or `&` (which get killed by bash tool timeouts).
 
-## Architecture Best Practices
+use your own sub-agents, the codex CLI and the gemini CLI to check the project for best practices. make recommendations based on the consolidated review feedback.
 
-- **TDD** — write tests first; code isn't done until tests pass.
-- **DRY** — extract shared utilities; no duplicated logic.
-- **Separation of Concerns** — each module handles one distinct responsibility.
-- **SRP** — every class/module/function/file has exactly one reason to change.
-- **Clear Abstractions & Contracts** — small, stable interfaces; hide implementation details.
-- **Low Coupling, High Cohesion** — self-contained modules, minimal cross-dependencies.
-- **Scalability & Statelessness** — design for horizontal scale; prefer stateless services.
-- **Observability & Testability** — logging, metrics, tracing; unit/integration testable.
-- **KISS** — keep solutions as simple as possible.
-- **YAGNI** — no speculative complexity or over-engineering.
-- **Don't Swallow Errors** — never silently catch exceptions, fill in missing values, or add timeouts for hangs. Errors must be visible so root causes can be found.
-- **No Placeholder Code** — production code only, not stubs or toys.
-- **No Comments for Removed Functionality** — source implements current requirements only; history lives in git.
-- **Layered Architecture** — clear tiers; each layer depends only on the one(s) below it.
-- **Prefer Non-Nullable Variables** — use nullability sparingly.
-- **Prefer Async Notifications** — over inefficient polling.
-- **First Principles** — assess architecture against what you'd build from scratch.
-- **Eliminate Race Conditions** — no dropped or corrupted data.
-- **Write for Maintainability** — clear, readable code for future developers.
-- **Arrange Idiomatically** — follow language/framework conventions for lints, static analysis, folder structure, and gitignore.
+# Architecture Best Practices
+
+- **TDD (Test-Driven Development)** - write the tests first; the implementation
+  code isn't done until the tests pass.
+- **DRY (Don’t Repeat Yourself)** – eliminate duplicated logic by extracting
+  shared utilities and modules.
+- **Separation of Concerns** – each module should handle one distinct
+  responsibility.
+- **Single Responsibility Principle (SRP)** – every class/module/function/file
+  should have exactly one reason to change.
+- **Clear Abstractions & Contracts** – expose intent through small, stable
+  interfaces and hide implementation details.
+- **Low Coupling, High Cohesion** – keep modules self-contained, minimize
+  cross-dependencies.
+- **Scalability & Statelessness** – design components to scale horizontally and
+  prefer stateless services when possible.
+- **Observability & Testability** – build in logging, metrics, tracing, and
+  ensure components can be unit/integration tested.
+- **KISS (Keep It Simple, Sir)** - keep solutions as simple as possible.
+- **YAGNI (You're Not Gonna Need It)** – avoid speculative complexity or
+  over-engineering.
+- **Don't Swallow Errors** by catching exceptions, silently filling in required
+  but missing values or adding timeouts when something hangs unexpectedly. All
+  of those are exceptions that should be thrown so that the errors can be seen,
+  root causes can be found and fixes can be applied.
+- **No Placeholder Code** - we're building production code here, not toys.
+- **No Comments for Removed Functionality** - the source is not the place to
+  keep history of what's changed; it's the place to implement the current
+  requirements only.
+- **Layered Architecture** - organize code into clear tiers where each layer
+  depends only on the one(s) below it, keeping logic cleanly separated.
+- **Prefer Non-Nullable Variables** when possible; use nullability sparingly.
+- **Prefer Async Notifications** when possible over inefficient polling.
+- **Consider First Principles** to assess your current architecture against the
+  one you'd use if you started over from scratch.
+- **Eliminate Race Conditions** that might cause dropped or corrupted data
+- **Write for Maintainability** so that the code is clear and readable and easy
+  to maintain by future developers.
+- **Arrange Project Idiomatically** for the language and framework being used,
+  including recommended lints, static analysis tools, folder structure and
+  gitignore entries.
