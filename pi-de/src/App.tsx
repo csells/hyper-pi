@@ -65,27 +65,48 @@ export default function App() {
     ai.enableThinkingSelector = false;
     ai.enableAttachments = false;
 
-    // Override sendMessage to allow sending while agent is busy.
-    // pi-web-ui's default rejects sends during isStreaming, but pi-socket
-    // supports follow-up messages via deliverAs: "followUp".
+    // Allow sending messages while agent is busy.
+    // pi-web-ui blocks sends during isStreaming, but pi-socket delivers
+    // them as followUp messages. We intercept at two levels:
+    //
+    // 1. Override AgentInterface.sendMessage — bypasses isStreaming check
+    // 2. Patch MessageEditor's Enter handler — the editor also checks
+    //    isStreaming before calling onSend, so we intercept keydown.
+    const remoteAgent = agent.remoteAgent;
     (ai as unknown as { sendMessage: (text: string) => void }).sendMessage = (text: string) => {
       if (!text.trim()) return;
-      agent.remoteAgent.prompt(text);
+      remoteAgent.prompt(text);
     };
 
-    // Patch MessageEditor to allow typing/sending during streaming.
-    // Pi-DE is a viewer — the remote agent handles message queuing.
-    // Wait for AgentInterface to render so the shadow DOM has the editor.
-    requestAnimationFrame(() => {
-      const editor = ai.shadowRoot?.querySelector("message-editor") as HTMLElement | null;
-      if (editor) {
-        Object.defineProperty(editor, "isStreaming", {
-          get: () => false,
-          set: () => {},
-          configurable: true,
-        });
+    // Intercept Enter key on the MessageEditor's textarea directly.
+    // This fires before MessageEditor's own keydown handler which checks isStreaming.
+    const patchEditor = () => {
+      const editor = ai.shadowRoot?.querySelector("message-editor") as
+        (HTMLElement & { value?: string }) | null;
+      if (!editor) {
+        requestAnimationFrame(patchEditor);
+        return;
       }
-    });
+      const textarea = editor.shadowRoot?.querySelector("textarea");
+      if (!textarea) {
+        requestAnimationFrame(patchEditor);
+        return;
+      }
+      textarea.addEventListener("keydown", (e: KeyboardEvent) => {
+        if (e.key === "Enter" && !e.shiftKey) {
+          const text = textarea.value.trim();
+          if (text) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            remoteAgent.prompt(text);
+            textarea.value = "";
+            // Also clear the editor's internal value
+            if (editor.value !== undefined) editor.value = "";
+          }
+        }
+      }, { capture: true }); // capture phase — fires before Lit's handler
+    };
+    requestAnimationFrame(patchEditor);
   }, [agent.remoteAgent, agent.status, activeNode]);
 
   const projectName = (cwd: string) =>

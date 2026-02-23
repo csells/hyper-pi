@@ -367,6 +367,12 @@ export class RemoteAgent {
 
   private handleMessageEnd(role: string): void {
     if (role === "assistant" && this.streamingMessage) {
+      // Check if any tool calls were made in this message — if so, tools
+      // will execute next and a new assistant message will follow.
+      const hasToolCalls = this.streamingMessage.content.some(
+        (b) => b.type === "toolCall",
+      );
+
       // Finalize: move streaming message into stable messages
       const finalMessage = { ...this.streamingMessage };
       this.streamingMessage = null;
@@ -374,20 +380,25 @@ export class RemoteAgent {
       this._state = {
         ...this._state,
         messages: [...this._state.messages, finalMessage],
-        isStreaming: false,
+        // Keep streaming/pending state alive if tools are about to execute
+        isStreaming: hasToolCalls,
         streamMessage: null,
-        pendingToolCalls: new Set(),
+        pendingToolCalls: hasToolCalls ? this._state.pendingToolCalls : new Set(),
       };
 
       this.emit({ type: "message_end", message: finalMessage });
-      this.emit({
-        type: "turn_end",
-        message: finalMessage,
-        toolResults: this._state.messages.filter(
-          (m): m is ToolResultMessage => (m as ToolResultMessage).role === "toolResult",
-        ),
-      });
-      this.emit({ type: "agent_end", messages: [finalMessage] });
+
+      if (!hasToolCalls) {
+        // No tool calls — this is the final message in the turn
+        this.emit({
+          type: "turn_end",
+          message: finalMessage,
+          toolResults: this._state.messages.filter(
+            (m): m is ToolResultMessage => (m as ToolResultMessage).role === "toolResult",
+          ),
+        });
+        this.emit({ type: "agent_end", messages: [finalMessage] });
+      }
     }
   }
 }
