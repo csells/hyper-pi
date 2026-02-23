@@ -40,6 +40,8 @@ export default function piSocket(pi: ExtensionAPI) {
   let hypivisorUrlValid = true;
   let hypivisorConnected = false;
   let reconnectDelay = 0;
+  let shutdownRequested = false;
+  let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
   const startPort = parseInt(process.env.PI_SOCKET_PORT || "8080", 10);
   const reconnectMs = parseInt(process.env.PI_SOCKET_RECONNECT_MS || "5000", 10);
@@ -55,12 +57,18 @@ export default function piSocket(pi: ExtensionAPI) {
   pi.on("session_start", async (_event, ctx) => {
     // Use the stable session ID so hypivisor can deduplicate across restarts
     nodeId = ctx.sessionManager.getSessionId();
+    shutdownRequested = false;
 
     // Close previous WSS if session restarts — prevents stale port registrations
     if (wss) {
       wss.close();
       wss = null;
     }
+
+    // Tear down previous hypivisor connection to prevent ghost registrations.
+    // Without this, session restarts leak orphaned WebSocket connections whose
+    // close handlers trigger reconnect loops with stale node IDs.
+    teardownHypivisor();
 
     // Reuse our previous port if still available, otherwise find a new one
     const port = wssPort ?? (await portfinder.getPortPromise({ port: startPort }));
@@ -114,17 +122,36 @@ export default function piSocket(pi: ExtensionAPI) {
   // ── Shutdown ────────────────────────────────────────────────
   pi.on("session_shutdown", async () => {
     log.info("pi-socket", "shutting down", { nodeId });
-    // Deregister from hypivisor before closing connections
+    shutdownRequested = true;
+
+    // Cancel any pending reconnect to prevent post-shutdown re-registration
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
+
+    // Deregister from hypivisor and wait for the message to flush before closing.
+    // Without the send callback, ws.close() can race the deregister frame.
     if (hypivisorWs && hypivisorWs.readyState === WebSocket.OPEN) {
+      const ws = hypivisorWs;
+      hypivisorWs = null;
+      ws.removeAllListeners("close"); // prevent close → reconnect
       const rpc: RpcRequest = {
         id: "dereg",
         method: "deregister",
         params: { id: nodeId },
       };
-      hypivisorWs.send(JSON.stringify(rpc));
+      await new Promise<void>((resolve) => {
+        ws.send(JSON.stringify(rpc), () => resolve());
+        setTimeout(resolve, 1000); // timeout in case send callback never fires
+      });
+      ws.close();
+    } else if (hypivisorWs) {
+      hypivisorWs.removeAllListeners("close");
+      hypivisorWs.close();
+      hypivisorWs = null;
     }
     if (wss) wss.close();
-    if (hypivisorWs) hypivisorWs.close();
   });
 
   // ── Broadcast ───────────────────────────────────────────────
@@ -138,9 +165,26 @@ export default function piSocket(pi: ExtensionAPI) {
     }
   }
 
-  // ── Hypivisor connection ────────────────────────────────────
+  // ── Hypivisor lifecycle ──────────────────────────────────────
+
+  /** Cleanly close the hypivisor WebSocket and cancel any pending reconnect. */
+  function teardownHypivisor(): void {
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
+    if (hypivisorWs) {
+      const oldWs = hypivisorWs;
+      hypivisorWs = null;
+      oldWs.removeAllListeners(); // prevent close → reconnect
+      oldWs.close();
+    }
+    hypivisorConnected = false;
+    reconnectDelay = 0;
+  }
+
   function connectToHypivisor(port: number): void {
-    if (!hypivisorUrlValid) return;
+    if (!hypivisorUrlValid || shutdownRequested) return;
 
     const url = hypiToken
       ? `${hypivisorUrl}?token=${encodeURIComponent(hypiToken)}`
@@ -188,10 +232,12 @@ export default function piSocket(pi: ExtensionAPI) {
   }
 
   function scheduleReconnect(port: number): void {
+    if (shutdownRequested) return;
     reconnectDelay = reconnectDelay === 0
       ? reconnectMs
       : Math.min(reconnectDelay * 2, reconnectMaxMs);
-    setTimeout(boundary("reconnect", () => {
+    reconnectTimer = setTimeout(boundary("reconnect", () => {
+      reconnectTimer = null;
       connectToHypivisor(port);
     }), reconnectDelay);
   }

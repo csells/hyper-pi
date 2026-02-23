@@ -32,7 +32,7 @@ struct Args {
     port: u16,
 
     /// Seconds before offline nodes are removed from the registry
-    #[arg(short = 't', long, default_value_t = 120)]
+    #[arg(short = 't', long, default_value_t = 30)]
     node_ttl: u64,
 }
 
@@ -78,7 +78,7 @@ fn main() {
     // Stale node cleanup task
     let cleanup_state = state.clone();
     std::thread::spawn(move || loop {
-        std::thread::sleep(Duration::from_secs(60));
+        std::thread::sleep(Duration::from_secs(15));
         let cx = ephemeral_cx();
         cleanup::cleanup_stale_nodes(&cx, &cleanup_state);
     });
