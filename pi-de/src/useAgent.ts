@@ -44,7 +44,14 @@ export function useAgent(activeNode: NodeInfo | null): UseAgentReturn {
     remoteAgent.reset();
     setHistoryTruncated(false);
 
-    const ws = new WebSocket(`ws://${activeNode.machine}:${activeNode.port}`);
+    // Connect via hypivisor proxy — single port, no direct agent access needed
+    const hypivisorHost = window.location.hostname;
+    const hypivisorPort = import.meta.env.VITE_HYPIVISOR_PORT || "31415";
+    const token = import.meta.env.VITE_HYPI_TOKEN || "";
+    const tokenParam = token ? `?token=${encodeURIComponent(token)}` : "";
+    const ws = new WebSocket(
+      `ws://${hypivisorHost}:${hypivisorPort}/ws/agent/${encodeURIComponent(activeNode.id)}${tokenParam}`,
+    );
     wsRef.current = ws;
 
     ws.onopen = () => {

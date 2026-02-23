@@ -502,7 +502,8 @@ fn handle_proxy_ws(
 
     // Thread: agent → dashboard
     let agent_to_dash = std::thread::spawn(move || {
-        let mut codec = FrameCodec::server();
+        // Agent sends unmasked server frames — decode with client codec
+        let mut codec = FrameCodec::client();
         let mut buf = asupersync::bytes::BytesMut::with_capacity(8192);
         loop {
             match ws_read(&mut agent_stream, &mut codec, &mut buf) {
