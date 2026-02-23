@@ -1,11 +1,14 @@
 {
   "id": "task-7",
   "title": "Pi-DE browser rendering tests with surf",
-  "status": "todo",
+  "status": "in_progress",
   "depends_on": [
     "task-4"
   ],
   "created_at": "2026-02-23T14:52:04.377Z",
-  "updated_at": "2026-02-23T14:52:04.378Z",
-  "attempt_count": 0
+  "updated_at": "2026-02-23T15:07:48.558Z",
+  "attempt_count": 1,
+  "started_at": "2026-02-23T15:07:48.540Z",
+  "base_commit": "5a0d0c5b6906a82c11ed7cfbc31301ab9686ce0c",
+  "assigned_to": "PureNova"
 }

@@ -172,10 +172,10 @@ describe("Pi agent lifecycle", () => {
     // Tools should include standard pi tools
     const tools = initState.tools as Array<Record<string, unknown>>;
     expect(tools.length).toBeGreaterThan(0);
-    const toolNames = tools.map((t) => t.name);
-    // pi always has at least 'Bash' and 'Read' tools
-    expect(toolNames).toContain("Bash");
-    expect(toolNames).toContain("Read");
+    const toolNames = tools.map((t) => (t.name as string).toLowerCase());
+    // pi always has at least 'bash' and 'read' tools (names may be any case)
+    expect(toolNames).toContain("bash");
+    expect(toolNames).toContain("read");
 
     proxyWs.close();
   }, 45_000);

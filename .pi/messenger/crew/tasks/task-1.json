@@ -1,12 +1,21 @@
 {
   "id": "task-1",
   "title": "Pi-socket index.ts unit tests",
-  "status": "in_progress",
+  "status": "done",
   "depends_on": [],
   "created_at": "2026-02-23T14:52:04.373Z",
-  "updated_at": "2026-02-23T14:52:04.411Z",
+  "updated_at": "2026-02-23T15:03:33.921Z",
   "attempt_count": 1,
   "started_at": "2026-02-23T14:52:04.393Z",
   "base_commit": "40ee37d9371b82261831838033a31f1137cd7f0e",
-  "assigned_to": "EpicLion"
+  "completed_at": "2026-02-23T15:03:33.921Z",
+  "summary": "Created comprehensive unit tests for pi-socket/src/index.ts with 44 passing tests covering broadcast(), session_start handler, ws.on(message) handler, init_state on client connect, event forwarding, session_shutdown handler, hypivisor connection, and event handler registration. All tests use proper mocking of ws, portfinder, and log modules without modifying production code.",
+  "evidence": {
+    "commits": [
+      "5a0d0c5"
+    ],
+    "tests": [
+      "npm test (pi-socket): 44 passed"
+    ]
+  }
 }
