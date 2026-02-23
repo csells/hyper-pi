@@ -22,7 +22,12 @@ export function useHypivisor(port: number, token: string): UseHypivisorReturn {
 
       case "node_joined":
         setNodes((prev) => {
-          const filtered = prev.filter((n) => n.id !== data.node.id);
+          // Deduplicate by id AND by machine+cwd (defense-in-depth against ghosts)
+          const filtered = prev.filter(
+            (n) =>
+              n.id !== data.node.id &&
+              !(n.machine === data.node.machine && n.cwd === data.node.cwd),
+          );
           return [...filtered, { ...data.node, status: "active" as const }];
         });
         break;
@@ -42,10 +47,17 @@ export function useHypivisor(port: number, token: string): UseHypivisorReturn {
   }, []);
 
   useEffect(() => {
-    let ws: WebSocket;
+    let ws: WebSocket | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout>;
+    let disposed = false;
 
     function connect() {
+      if (disposed) return;
+      // Close previous connection before creating a new one
+      if (ws) {
+        ws.onclose = null; // prevent close → reconnect loop
+        ws.close();
+      }
       const url = `ws://localhost:${port}/ws${token ? `?token=${token}` : ""}`;
       ws = new WebSocket(url);
       wsRef.current = ws;
@@ -69,7 +81,9 @@ export function useHypivisor(port: number, token: string): UseHypivisorReturn {
 
       ws.onclose = () => {
         setStatus("disconnected");
-        reconnectTimer = setTimeout(connect, 5000);
+        if (!disposed) {
+          reconnectTimer = setTimeout(connect, 5000);
+        }
       };
 
       ws.onerror = () => {
@@ -79,8 +93,13 @@ export function useHypivisor(port: number, token: string): UseHypivisorReturn {
 
     connect();
     return () => {
+      disposed = true;
       clearTimeout(reconnectTimer);
-      ws?.close();
+      if (ws) {
+        ws.onclose = null; // prevent close → reconnect after disposal
+        ws.close();
+      }
+      wsRef.current = null;
     };
   }, [port, token, handleEvent]);
 
