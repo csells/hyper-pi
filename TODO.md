@@ -4,6 +4,7 @@
 
 - why the heck are you picking and choosing what messages to send???
 - architectural best practices
+- zombie agents listed by the hypivisor all the time that need addressing
 - harden!
 
 ## mobile
