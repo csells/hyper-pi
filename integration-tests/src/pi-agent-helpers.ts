@@ -105,14 +105,7 @@ export async function startPiAgent(opts: {
         cwd: opts.cwd,
       };
     }
-    // Log progress every 5 seconds for debugging
-    const elapsed = Date.now() - startTime;
-    if (elapsed > 0 && elapsed % 5000 < POLL_INTERVAL_MS) {
-      const cwds = nodes.map((n) => n.cwd);
-      console.error(
-        `[startPiAgent] ${elapsed}ms elapsed, ${nodes.length} nodes, looking for cwd=${opts.cwd}, found cwds=${JSON.stringify(cwds)}`,
-      );
-    }
+
   }
 
   // Timeout — clean up and throw

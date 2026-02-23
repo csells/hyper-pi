@@ -9,7 +9,9 @@
 
 ## mobile
 
-- I STILL can't enter a prompt while the agent is producing it's result!!!
+- scroll position when selecting an agent isn't at the bottom -- it's at some
+  random spot, perhaps based on the previous scroll position from the last
+  selected agent
 - needs to be responsive to mobile form-factors
   - clicking on a agent from the first page goes to a second page with the
     conversation loaded; pressing the back button takes the user back to the
@@ -31,6 +33,8 @@
   pi
 - what are the greyed out agents for?
 
-## files
+## quality of life
 
+- I STILL can't enter a prompt while the agent is producing it's result!!!
 - attach files (check the tmux-adapter implementation)
+- autocomplete for commands when the user presses "/"

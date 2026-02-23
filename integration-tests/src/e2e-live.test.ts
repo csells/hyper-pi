@@ -1,6 +1,9 @@
 /**
  * Live E2E tests against the REAL running infrastructure.
  *
+ * NOT standalone — excluded from `npm test` by default.
+ * Run explicitly: `npm run test:e2e-live`
+ *
  * Prerequisites (must be running before tests):
  *   1. hypivisor on port 31415
  *   2. At least one pi instance with pi-socket extension loaded

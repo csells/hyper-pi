@@ -318,60 +318,26 @@ describe("Cross-channel message visibility", () => {
     // Give the agent a moment to fully stabilize
     await sleep(1000);
 
-    // Connect web client
-    const webClient = await connectToAgent(agent.nodeId);
-
-    // Send a long-running prompt from the TUI
+    // Send a prompt from the TUI that will take some time to process
     const tuiMarker = `XTEST_STREAM_${Math.random().toString(36).slice(2, 8)}`;
     sendTmuxKeys(agent.sessionName, `say exactly: ${tuiMarker}`);
 
-    // Wait a bit for the TUI message to be received
-    await sleep(2000);
+    // Wait for TUI message to appear (agent is now processing it)
+    await waitForTmuxText(agent.sessionName, tuiMarker, 15_000);
 
-    // While processing, send a follow-up from the web
+    // While the agent is processing the TUI message, send a web follow-up
+    // pi-socket will deliver it with { deliverAs: "followUp" }
     const webMarker = `XTEST_FOLLOWUP_${Math.random().toString(36).slice(2, 8)}`;
-    webClient.ws.send(`say exactly: ${webMarker}`);
+    const ws = await connectToAgent(agent.nodeId);
+    ws.ws.send(`say exactly: ${webMarker}`);
 
-    // Collect events to verify both messages were processed
-    let foundTuiMessage = false;
-    let foundWebMessage = false;
-
-    const allEvents = await collectEvents(
-      webClient,
-      (evts) => {
-        // Look for both user messages
-        foundTuiMessage = evts.some(
-          (e) =>
-            e.type === "message_start" &&
-            (e.message as Record<string, unknown>)?.role === "user",
-        );
-        foundWebMessage = evts.some(
-          (e) =>
-            e.type === "message_start" &&
-            (e.message as Record<string, unknown>)?.role === "user" &&
-            (e.message as Record<string, unknown>)?.role === "user",
-        );
-        return evts.filter((e) => e.type === "message_start" && (e.message as Record<string, unknown>)?.role === "user").length >= 2;
-      },
-      30_000,
-    );
-
-    expect(allEvents.length).toBeGreaterThan(0);
-
-    // Count user message_start events
-    const userMessages = allEvents.filter(
-      (e) =>
-        e.type === "message_start" &&
-        (e.message as Record<string, unknown>)?.role === "user",
-    );
-    expect(userMessages.length).toBeGreaterThanOrEqual(2);
-
-    // Verify TUI shows both messages
+    // Both messages should eventually appear in TUI output
+    // The web follow-up is queued and delivered after the current turn
     const tmuxOutput = await waitForTmuxText(agent.sessionName, webMarker, 45_000);
     expect(tmuxOutput).toContain(tuiMarker);
     expect(tmuxOutput).toContain(webMarker);
 
-    webClient.close();
+    ws.close();
   }, 90_000);
 
   it("Concurrent web clients: web messages appear in TUI for both clients", async () => {

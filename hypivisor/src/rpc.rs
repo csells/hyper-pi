@@ -539,4 +539,179 @@ mod tests {
         // Node should be removed
         assert_eq!(reg.nodes.read().unwrap().len(), 0);
     }
+
+    // ── Error branch coverage ──
+
+    #[test]
+    fn register_missing_params_returns_error() {
+        let cx = crate::ephemeral_cx();
+        let reg = make_registry();
+        let req = RpcRequest {
+            id: Some("1".into()),
+            method: "register".into(),
+            params: None,
+        };
+        let resp = dispatch(&cx, req, &reg, None);
+        assert!(resp.error.is_some());
+        assert_eq!(resp.error.unwrap(), "Missing params");
+    }
+
+    #[test]
+    fn register_invalid_node_info_returns_error() {
+        let cx = crate::ephemeral_cx();
+        let reg = make_registry();
+        let req = RpcRequest {
+            id: Some("1".into()),
+            method: "register".into(),
+            params: Some(serde_json::json!({ "not": "a valid node" })),
+        };
+        let resp = dispatch(&cx, req, &reg, None);
+        assert!(resp.error.is_some());
+        assert_eq!(resp.error.unwrap(), "Invalid node info");
+    }
+
+    #[test]
+    fn deregister_missing_params_id_returns_error() {
+        let cx = crate::ephemeral_cx();
+        let reg = make_registry();
+        let req = RpcRequest {
+            id: Some("1".into()),
+            method: "deregister".into(),
+            params: Some(serde_json::json!({ "wrong_field": "value" })),
+        };
+        let resp = dispatch(&cx, req, &reg, None);
+        assert!(resp.error.is_some());
+        assert_eq!(resp.error.unwrap(), "Missing params.id");
+    }
+
+    #[test]
+    fn deregister_no_params_returns_error() {
+        let cx = crate::ephemeral_cx();
+        let reg = make_registry();
+        let req = RpcRequest {
+            id: Some("1".into()),
+            method: "deregister".into(),
+            params: None,
+        };
+        let resp = dispatch(&cx, req, &reg, None);
+        assert!(resp.error.is_some());
+        assert_eq!(resp.error.unwrap(), "Missing params.id");
+    }
+
+    #[test]
+    fn list_directories_default_path() {
+        let cx = crate::ephemeral_cx();
+        let reg = make_registry();
+        let req = RpcRequest {
+            id: Some("1".into()),
+            method: "list_directories".into(),
+            params: None,
+        };
+        let resp = dispatch(&cx, req, &reg, None);
+        // Should succeed with home dir listing
+        assert!(resp.error.is_none());
+        let result = resp.result.unwrap();
+        assert!(result["current"].is_string());
+        assert!(result["directories"].is_array());
+    }
+
+    #[test]
+    fn list_directories_with_explicit_path() {
+        let cx = crate::ephemeral_cx();
+        let reg = make_registry();
+        let home = dirs::home_dir().unwrap();
+        let req = RpcRequest {
+            id: Some("1".into()),
+            method: "list_directories".into(),
+            params: Some(serde_json::json!({ "path": home.to_str().unwrap() })),
+        };
+        let resp = dispatch(&cx, req, &reg, None);
+        assert!(resp.error.is_none());
+        let result = resp.result.unwrap();
+        assert!(result["current"].is_string());
+    }
+
+    #[test]
+    fn list_directories_outside_home_returns_error() {
+        let cx = crate::ephemeral_cx();
+        let reg = make_registry();
+        let req = RpcRequest {
+            id: Some("1".into()),
+            method: "list_directories".into(),
+            params: Some(serde_json::json!({ "path": "/usr" })),
+        };
+        let resp = dispatch(&cx, req, &reg, None);
+        assert!(resp.error.is_some());
+    }
+
+    #[test]
+    fn spawn_agent_missing_params_returns_error() {
+        let cx = crate::ephemeral_cx();
+        let reg = make_registry();
+        let req = RpcRequest {
+            id: Some("1".into()),
+            method: "spawn_agent".into(),
+            params: None,
+        };
+        let resp = dispatch(&cx, req, &reg, None);
+        assert!(resp.error.is_some());
+        assert_eq!(resp.error.unwrap(), "Missing params");
+    }
+
+    #[test]
+    fn spawn_agent_nonexistent_path_returns_error() {
+        let cx = crate::ephemeral_cx();
+        let reg = make_registry();
+        let req = RpcRequest {
+            id: Some("1".into()),
+            method: "spawn_agent".into(),
+            params: Some(serde_json::json!({
+                "path": "/tmp/hypi_nonexistent_test_path_12345"
+            })),
+        };
+        let resp = dispatch(&cx, req, &reg, None);
+        assert!(resp.error.is_some());
+    }
+
+    #[test]
+    fn ping_returns_health() {
+        let cx = crate::ephemeral_cx();
+        let reg = make_registry();
+        let req = RpcRequest {
+            id: Some("1".into()),
+            method: "ping".into(),
+            params: None,
+        };
+        let resp = dispatch(&cx, req, &reg, None);
+        assert!(resp.error.is_none());
+        let result = resp.result.unwrap();
+        assert_eq!(result["status"], "healthy");
+        assert_eq!(result["nodes"], 0);
+        assert!(result["version"].is_string());
+    }
+
+    #[test]
+    fn ping_counts_registered_nodes() {
+        let cx = crate::ephemeral_cx();
+        let reg = make_registry();
+        // Register 2 nodes
+        for (id, port) in [("n1", 80), ("n2", 81)] {
+            let req = RpcRequest {
+                id: Some("r".into()),
+                method: "register".into(),
+                params: Some(serde_json::json!({
+                    "id": id, "machine": "h", "cwd": "/tmp", "port": port, "status": "active"
+                })),
+            };
+            dispatch(&cx, req, &reg, None);
+        }
+
+        let req = RpcRequest {
+            id: Some("1".into()),
+            method: "ping".into(),
+            params: None,
+        };
+        let resp = dispatch(&cx, req, &reg, None);
+        assert_eq!(resp.result.unwrap()["nodes"], 2);
+    }
 }

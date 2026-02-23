@@ -60,6 +60,24 @@ Read the relevant spec before implementing or modifying any component.
 
 Each component has its own `AGENTS.md` with build commands.
 
+## Testing
+
+Tests are measured with actual coverage tools (`cargo tarpaulin` for Rust, `@vitest/coverage-v8` for TypeScript). Current measured coverage:
+
+| Component | Tests | Line Coverage |
+|-----------|-------|---------------|
+| hypivisor | 107 (89 unit + 18 integration) | **81%** |
+| pi-socket | 44 | 73% |
+| Pi-DE | 59 | **89%** |
+| integration-tests | 51 | (exercises all components) |
+
+The integration tests (`integration-tests/`) spawn real pi agents in tmux sessions and test the full WebSocket stack end-to-end. Key test infrastructure:
+
+- `pi-agent-helpers.ts` — `startPiAgent()` / `stopPiAgent()` via tmux, with `waitForNode()` polling the hypivisor for registration
+- `helpers.ts` — `startHypivisor()` on a random port, `connectWs()` / `BufferedWs` for WebSocket test clients
+- Tests run sequentially (`fileParallelism: false` in vitest.config.ts) to avoid port/tmux contention
+- macOS `/var` → `/private/var` symlink resolved via `realpathSync` in `createTempCwd()`
+
 ## Self-Hardening Architecture
 
 pi-socket runs inside pi's Node.js process. An unhandled exception in the extension kills the host pi agent. To prevent this while maintaining visibility into bugs, pi-socket uses a **two-layer error architecture**.

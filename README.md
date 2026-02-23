@@ -140,12 +140,29 @@ The ledger is version-controlled so the skill learns over time — it knows what
 
 ```bash
 # Unit tests
-cd pi-socket && npm test
-cd hypivisor && cargo test
+cd pi-socket && npm test       # 44 tests
+cd pi-de && npm test           # 59 tests
+cd hypivisor && cargo test     # 107 tests (89 unit + 18 in-process integration)
 
-# Integration tests (requires built hypivisor)
+# Integration tests (requires built hypivisor + real pi agents via tmux)
 cd integration-tests && npx vitest run
+
+# Coverage
+cd pi-socket && npx vitest run --coverage   # 72.6% lines
+cd pi-de && npx vitest run --coverage       # 88.8% lines
+cd hypivisor && cargo tarpaulin --exclude-files src/main.rs --out stdout  # 81.0% lines
 ```
+
+### Test breakdown
+
+| Component | Unit | Integration | Coverage |
+|-----------|------|-------------|----------|
+| **hypivisor** | 89 (auth, cleanup, fs_browser, handlers, rpc, spawn) | 18 (in-process server tests) | 81% lines |
+| **pi-socket** | 44 (index, history, safety) | — | 73% lines |
+| **Pi-DE** | 59 (RemoteAgent, useHypivisor, useAgent, rpc, SpawnModal, initStorage, patchLit) | — | 89% lines |
+| **integration-tests** | — | 51 (smoke, reconnect, multi-agent, proxy-relay, lifecycle, message-roundtrip, cross-channel, browser-rendering, e2e-live) | — |
+
+The integration tests spawn real pi agents in tmux sessions and test the full stack: registration/deregistration, message round-trips (web→proxy→agent→response→web), cross-channel visibility (TUI↔Web), and browser rendering via the `surf` CLI.
 
 ## License
 
