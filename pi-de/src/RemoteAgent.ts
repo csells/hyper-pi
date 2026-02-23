@@ -151,7 +151,7 @@ export class RemoteAgent {
 
   // ── Socket event handling ─────────────────────────────────────
 
-  private handleSocketEvent(event: any): void {
+  private handleSocketEvent(event: SocketEvent | { error: string }): void {
     // Check for proxy error messages (e.g., agent not found)
     if ("error" in event && typeof event.error === "string") {
       if (this.onError) {

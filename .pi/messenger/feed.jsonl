@@ -1,0 +1,51 @@
+{"ts":"2026-02-23T14:20:14.568Z","agent":"JadeIce","type":"reserve","target":"pi-socket/src/safety.ts","preview":"task-7: Fix truncation perf, async boundary, logger"}
+{"ts":"2026-02-23T14:20:15.377Z","agent":"EpicZenith","type":"task.block","target":"task-2","preview":"Max attempts reached"}
+{"ts":"2026-02-23T14:20:15.402Z","agent":"JadeQuartz","type":"task.start","target":"task-8","preview":"Fix hypivisor NodeStatus enum and deregister auth"}
+{"ts":"2026-02-23T14:20:16.084Z","agent":"LoudLion","type":"edit","target":"hypivisor/src/main.rs"}
+{"ts":"2026-02-23T14:20:18.691Z","agent":"GoldUnion","type":"task.done","target":"task-3","preview":"Fixed RemoteAgent event listener leak by tracking messageHandler reference, removing listeners on disconnect, and adding onInitState/onError callbacks. All 15 tests pass including new tests for listener cleanup and callback handling."}
+{"ts":"2026-02-23T14:20:18.731Z","agent":"RedNova","type":"task.start","target":"task-9","preview":"Add integration tests for reconnect and multi-agent scenarios"}
+{"ts":"2026-02-23T14:20:20.289Z","agent":"LoudLion","type":"message","target":"OakNova","preview":"LoudLion on task-5. I need to modify handle_registry_ws (broadcast thread fix + read timeout) and handle_proxy_ws (thread leak + read timeout). What's your scope in task-6? Can we coordinate the ed..."}
+{"ts":"2026-02-23T14:20:20.356Z","agent":"JadeQuartz","type":"join"}
+{"ts":"2026-02-23T14:20:20.774Z","agent":"CalmOwl","type":"task.unblock","target":"task-2","preview":"Fix useAgent.ts connection leaks and error handling"}
+{"ts":"2026-02-23T14:20:21.151Z","agent":"LoudLion","type":"edit","target":"hypivisor/src/main.rs"}
+{"ts":"2026-02-23T14:20:21.370Z","agent":"GoldUnion","type":"message","preview":"Completed task-3: Fixed RemoteAgent event listener leak — listeners now properly cleaned up on disconnect, onInitState/onError callbacks added. All 15 tests pass. Commit: ffc8fbb"}
+{"ts":"2026-02-23T14:20:22.296Z","agent":"RedNova","type":"join"}
+{"ts":"2026-02-23T14:20:22.624Z","agent":"DarkJaguar","type":"test","preview":"passed"}
+{"ts":"2026-02-23T14:20:23.115Z","agent":"SwiftPhoenix","type":"test","preview":"passed"}
+{"ts":"2026-02-23T14:20:25.907Z","agent":"CalmOwl","type":"task.start","target":"task-2","preview":"Fix useAgent.ts connection leaks and error handling"}
+{"ts":"2026-02-23T14:20:27.010Z","agent":"JadeQuartz","type":"task.reset","target":"task-8","preview":"worker exited"}
+{"ts":"2026-02-23T14:20:27.425Z","agent":"JadeIce","type":"message","preview":"Starting task-7 (Fix pi-socket: truncation perf, async boundary, logger) — will fix async boundary handling, add error logging to safeSerialize, and add tests"}
+{"ts":"2026-02-23T14:20:30.271Z","agent":"CalmOwl","type":"reserve","target":"pi-de/src/useAgent.ts","preview":"Fixing task-2: useAgent connection leaks and error handling"}
+{"ts":"2026-02-23T14:20:31.412Z","agent":"OakNova","type":"task.reset","target":"task-6","preview":"worker exited"}
+{"ts":"2026-02-23T14:20:31.439Z","agent":"LoudArrow","type":"task.start","target":"task-6","preview":"Fix hypivisor proxy: validate handshake, use node.machine, URL-decode token"}
+{"ts":"2026-02-23T14:20:31.779Z","agent":"DarkJaguar","type":"test","preview":"passed"}
+{"ts":"2026-02-23T14:20:36.745Z","agent":"LoudArrow","type":"join"}
+{"ts":"2026-02-23T14:20:37.078Z","agent":"JadeIce","type":"edit","target":"pi-socket/src/safety.ts"}
+{"ts":"2026-02-23T14:20:40.138Z","agent":"LoudLion","type":"release","target":"hypivisor/src/main.rs"}
+{"ts":"2026-02-23T14:20:40.644Z","agent":"JadeIce","type":"edit","target":"pi-socket/src/index.ts"}
+{"ts":"2026-02-23T14:20:41.781Z","agent":"DarkJaguar","type":"test","preview":"passed"}
+{"ts":"2026-02-23T14:20:42.961Z","agent":"LoudLion","type":"reserve","target":"hypivisor/src/main.rs","preview":"task-5: broadcast thread hang + FD leaks (read timeouts + thread cleanup)"}
+{"ts":"2026-02-23T14:20:43.717Z","agent":"DarkJaguar","type":"edit","target":"pi-de/src/rpc.test.ts"}
+{"ts":"2026-02-23T14:20:46.520Z","agent":"JadeIce","type":"edit","target":"pi-socket/src/history.test.ts"}
+{"ts":"2026-02-23T14:20:47.233Z","agent":"CalmOwl","type":"reserve","target":"pi-de/src/useAgent.ts","preview":"Fixing task-2: useAgent connection leaks and error handling"}
+{"ts":"2026-02-23T14:20:47.304Z","agent":"LoudArrow","type":"reserve","target":"hypivisor/src/main.rs","preview":"task-6"}
+{"ts":"2026-02-23T14:20:47.305Z","agent":"LoudArrow","type":"reserve","target":"hypivisor/src/auth.rs","preview":"task-6"}
+{"ts":"2026-02-23T14:20:50.132Z","agent":"DarkJaguar","type":"edit","target":"pi-de/src/SpawnModal.tsx"}
+{"ts":"2026-02-23T14:20:50.374Z","agent":"JadeIce","type":"test","preview":"passed"}
+{"ts":"2026-02-23T14:20:50.952Z","agent":"RedNova","type":"reserve","target":"integration-tests/src/reconnect.test.ts","preview":"task-9: Add integration tests for reconnect and multi-agent scenarios"}
+{"ts":"2026-02-23T14:20:50.952Z","agent":"RedNova","type":"reserve","target":"integration-tests/src/helpers.ts","preview":"task-9: Add integration tests for reconnect and multi-agent scenarios"}
+{"ts":"2026-02-23T14:20:52.199Z","agent":"RedNova","type":"task.reset","target":"task-9","preview":"worker exited"}
+{"ts":"2026-02-23T14:20:52.232Z","agent":"CalmLion","type":"task.start","target":"task-8","preview":"Fix hypivisor NodeStatus enum and deregister auth"}
+{"ts":"2026-02-23T14:20:52.724Z","agent":"JadeIce","type":"edit","target":"pi-socket/src/safety.test.ts"}
+{"ts":"2026-02-23T14:20:56.332Z","agent":"JadeIce","type":"test","preview":"passed"}
+{"ts":"2026-02-23T14:20:57.947Z","agent":"CalmLion","type":"join"}
+{"ts":"2026-02-23T14:20:58.860Z","agent":"JadeIce","type":"edit","target":"pi-socket/src/safety.test.ts"}
+{"ts":"2026-02-23T14:21:08.056Z","agent":"CalmOwl","type":"edit","target":"/Users/csells/Code/csells/hyper-pi/pi-de/src/RemoteAgent.ts"}
+{"ts":"2026-02-23T14:21:10.885Z","agent":"CalmLion","type":"message","target":"LoudArrow","preview":"Starting task-8 — fixing NodeStatus enum and deregister auth in hypivisor. I'll need to update status comparisons in main.rs, state.rs, rpc.rs. Can you coordinate?"}
+{"ts":"2026-02-23T14:21:12.623Z","agent":"CalmOwl","type":"edit","target":"/Users/csells/Code/csells/hyper-pi/pi-de/src/useAgent.ts"}
+{"ts":"2026-02-23T14:21:12.877Z","agent":"DarkJaguar","type":"edit","target":"pi-de/src/SpawnModal.tsx"}
+{"ts":"2026-02-23T14:21:14.255Z","agent":"DarkJaguar","type":"task.reset","target":"task-4","preview":"worker exited"}
+{"ts":"2026-02-23T14:21:14.294Z","agent":"PureYak","type":"task.start","target":"task-4","preview":"Fix rpc.ts pending requests leak and SpawnModal loop"}
+{"ts":"2026-02-23T14:21:16.071Z","agent":"SwiftPhoenix","type":"test","preview":"passed"}
+{"ts":"2026-02-23T14:21:16.895Z","agent":"SwiftPhoenix","type":"edit","target":"pi-de/src/useHypivisor.ts"}
+{"ts":"2026-02-23T14:21:20.303Z","agent":"PureYak","type":"join"}

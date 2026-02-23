@@ -14,6 +14,9 @@ import * as log from "./log.js";
 /**
  * Wrap a Node event-loop callback with a safety net.
  *
+ * Handles both sync and async functions: catches synchronous exceptions
+ * and async Promise rejections.
+ *
  * Usage:
  *   wss.on("connection", boundary("wss.connection", (ws) => { ... }));
  *   setTimeout(boundary("reconnect", () => { ... }), ms);
@@ -24,7 +27,13 @@ export function boundary<A extends unknown[]>(
 ): (...args: A) => void {
   return (...args: A) => {
     try {
-      fn(...args);
+      const result = fn(...args);
+      // Handle async functions: wrap Promise rejections
+      if (result != null && typeof (result as Record<string, unknown>).catch === "function") {
+        (result as Promise<unknown>).catch((err) => {
+          log.error(name, err);
+        });
+      }
     } catch (err) {
       log.error(name, err);
     }

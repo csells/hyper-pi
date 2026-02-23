@@ -1,0 +1,12 @@
+{
+  "id": "task-1",
+  "title": "Fix ghost nodes in useHypivisor.ts",
+  "status": "in_progress",
+  "depends_on": [],
+  "created_at": "2026-02-23T14:11:39.830Z",
+  "updated_at": "2026-02-23T14:19:44.390Z",
+  "attempt_count": 4,
+  "started_at": "2026-02-23T14:19:44.367Z",
+  "base_commit": "39f2f358294cb996aa0dffbb5bc6e22db819bc38",
+  "assigned_to": "SwiftPhoenix"
+}

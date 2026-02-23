@@ -1,6 +1,18 @@
 /// Returns true if the token matches or if auth is disabled (empty secret).
+/// Handles URL-encoded tokens by decoding before comparison.
 pub fn is_authorized(token: Option<&str>, secret: &str) -> bool {
-    secret.is_empty() || token == Some(secret)
+    if secret.is_empty() {
+        return true;
+    }
+    
+    token.and_then(|t| {
+        // URL-decode the token
+        let decoded = percent_encoding::percent_decode_str(t)
+            .decode_utf8()
+            .ok()?
+            .to_string();
+        Some(decoded == secret)
+    }) == Some(true)
 }
 
 /// Extract token from query string (e.g., "token=abc123&foo=bar" → Some("abc123"))
@@ -40,6 +52,20 @@ mod tests {
     #[test]
     fn missing_token_rejected_when_secret_set() {
         assert!(!is_authorized(None, "secret123"));
+    }
+
+    #[test]
+    fn url_encoded_token_matches() {
+        // Token with special characters: "secret@123"
+        let encoded_token = "secret%40123";
+        assert!(is_authorized(Some(encoded_token), "secret@123"));
+    }
+
+    #[test]
+    fn url_encoded_token_with_spaces() {
+        // Token with spaces: "my secret token"
+        let encoded_token = "my%20secret%20token";
+        assert!(is_authorized(Some(encoded_token), "my secret token"));
     }
 
     #[test]

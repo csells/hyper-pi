@@ -23,7 +23,6 @@ export function useAgent(activeNode: NodeInfo | null): UseAgentReturn {
   const handleInitState = useCallback(
     (payload: { truncated?: boolean }) => {
       setHistoryTruncated(payload.truncated ?? false);
-      // RemoteAgent handles init_state internally via handleSocketEvent
     },
     [],
   );
@@ -36,10 +35,6 @@ export function useAgent(activeNode: NodeInfo | null): UseAgentReturn {
       return;
     }
 
-    if (wsRef.current) {
-      wsRef.current.close();
-    }
-
     setStatus("connecting");
     remoteAgent.reset();
     setHistoryTruncated(false);
@@ -49,6 +44,14 @@ export function useAgent(activeNode: NodeInfo | null): UseAgentReturn {
     const nodeId = activeNode.id; // capture for closures (activeNode is non-null here)
 
     function connect() {
+      // Close previous WebSocket if it exists (prevent connection leak)
+      const prevWs = wsRef.current;
+      if (prevWs) {
+        // Null the onclose handler first to prevent recursive reconnect on this old connection
+        prevWs.onclose = null;
+        prevWs.close();
+      }
+
       // Connect via hypivisor proxy — single port, no direct agent access needed
       const hypivisorHost = window.location.hostname;
       const hypivisorPort = import.meta.env.VITE_HYPIVISOR_PORT || "31415";
@@ -61,14 +64,13 @@ export function useAgent(activeNode: NodeInfo | null): UseAgentReturn {
 
       ws.onopen = () => {
         setStatus("connected");
+        // Set up callbacks for RemoteAgent events before connecting
+        remoteAgent.onInitState = handleInitState;
+        remoteAgent.onError = () => {
+          setStatus("offline");
+          ws.close();
+        };
         remoteAgent.connect(ws);
-      };
-
-      ws.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        if (data.type === "init_state") {
-          handleInitState(data as { truncated?: boolean });
-        }
       };
 
       ws.onclose = () => {
@@ -97,7 +99,7 @@ export function useAgent(activeNode: NodeInfo | null): UseAgentReturn {
       remoteAgent.disconnect();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps -- activeNode ref avoids reconnect loops
-  }, [activeNode?.id, activeNode?.status, remoteAgent, handleInitState]);
+  }, [activeNode?.id, remoteAgent, handleInitState]);
 
   const sendMessage = useCallback(
     (text: string) => {

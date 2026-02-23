@@ -1,0 +1,12 @@
+{
+  "id": "task-4",
+  "title": "Fix rpc.ts pending requests leak and SpawnModal loop",
+  "status": "in_progress",
+  "depends_on": [],
+  "created_at": "2026-02-23T14:12:09.067Z",
+  "updated_at": "2026-02-23T14:21:14.293Z",
+  "attempt_count": 3,
+  "started_at": "2026-02-23T14:21:14.266Z",
+  "base_commit": "ffc8fbb8d09c067ee00bdc8fc72a444fd346e9dd",
+  "assigned_to": "PureYak"
+}

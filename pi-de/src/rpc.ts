@@ -55,3 +55,12 @@ export function handleRpcResponse(data: {
     pending.resolve(data.result);
   }
 }
+
+/** Reject all pending requests and clear the map. Called on WebSocket close. */
+export function rejectAllPending(reason: string): void {
+  pendingRequests.forEach((pending) => {
+    clearTimeout(pending.timer);
+    pending.reject(new Error(reason));
+  });
+  pendingRequests.clear();
+}

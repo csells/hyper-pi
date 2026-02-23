@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { rpcCall, handleRpcResponse, pendingRequests } from "./rpc";
+import { rpcCall, handleRpcResponse, rejectAllPending, pendingRequests } from "./rpc";
 
 describe("rpc", () => {
   beforeEach(() => {
@@ -49,5 +49,45 @@ describe("rpc", () => {
   it("ignores responses for unknown ids", () => {
     handleRpcResponse({ id: "unknown-id", result: {} });
     expect(pendingRequests.size).toBe(0);
+  });
+
+  it("rejectAllPending rejects all pending requests and clears map", async () => {
+    const mockWs = { send: vi.fn() } as unknown as WebSocket;
+
+    const promise1 = rpcCall(mockWs, "test1");
+    const promise2 = rpcCall(mockWs, "test2");
+    const promise3 = rpcCall(mockWs, "test3");
+
+    expect(pendingRequests.size).toBe(3);
+
+    const reason = "WebSocket closed";
+    rejectAllPending(reason);
+
+    expect(pendingRequests.size).toBe(0);
+
+    await expect(promise1).rejects.toThrow(reason);
+    await expect(promise2).rejects.toThrow(reason);
+    await expect(promise3).rejects.toThrow(reason);
+  });
+
+  it("rejectAllPending clears timeouts", async () => {
+    const mockWs = { send: vi.fn() } as unknown as WebSocket;
+    const clearTimeoutSpy = vi.spyOn(global, "clearTimeout");
+
+    const promise1 = rpcCall(mockWs, "test1");
+    const promise2 = rpcCall(mockWs, "test2");
+
+    expect(pendingRequests.size).toBe(2);
+
+    rejectAllPending("Connection lost");
+
+    expect(clearTimeoutSpy).toHaveBeenCalledTimes(2);
+    expect(pendingRequests.size).toBe(0);
+
+    // Catch rejections to prevent unhandled rejection warnings
+    await promise1.catch(() => {});
+    await promise2.catch(() => {});
+
+    clearTimeoutSpy.mockRestore();
   });
 });

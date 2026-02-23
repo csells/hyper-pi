@@ -13,34 +13,42 @@ export default function SpawnModal({ hvWs, onClose }: SpawnModalProps) {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // Load directories whenever currentPath changes
-  const loadDirs = useCallback(async () => {
+  // Load directories for a given path
+  const loadDirs = useCallback(async (path: string) => {
     setError(null);
     try {
       const result = await rpcCall<{ current: string; directories: string[] }>(
         hvWs,
         "list_directories",
-        currentPath ? { path: currentPath } : {},
+        path ? { path } : {},
       );
       setCurrentPath(result.current);
       setDirs(result.directories);
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e: unknown) {
+      if (e instanceof Error) {
+        setError(e.message);
+      } else {
+        setError(String(e));
+      }
     }
-  }, [hvWs, currentPath]);
+  }, [hvWs]);
 
   useEffect(() => {
-    loadDirs();
+    loadDirs(currentPath);
   }, [loadDirs]);
 
   const handleNavigate = (dir: string) => {
-    setCurrentPath(currentPath.replace(/\/$/, "") + "/" + dir);
+    const newPath = currentPath.replace(/\/$/, "") + "/" + dir;
+    setCurrentPath(newPath);
+    loadDirs(newPath);
   };
 
   const handleGoUp = () => {
     const parts = currentPath.split("/").filter(Boolean);
     parts.pop();
-    setCurrentPath("/" + parts.join("/"));
+    const newPath = "/" + parts.join("/");
+    setCurrentPath(newPath);
+    loadDirs(newPath);
   };
 
   const handleSpawn = async () => {
@@ -52,8 +60,12 @@ export default function SpawnModal({ hvWs, onClose }: SpawnModalProps) {
         new_folder: newFolder || undefined,
       });
       onClose(); // Agent appears via node_joined event
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e: unknown) {
+      if (e instanceof Error) {
+        setError(e.message);
+      } else {
+        setError(String(e));
+      }
     } finally {
       setLoading(false);
     }

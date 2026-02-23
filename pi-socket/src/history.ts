@@ -42,17 +42,22 @@ export function buildInitState(
     messages.push(msg);
   }
 
-  // Truncation — drop oldest messages until under budget
+  // Truncation — single-pass estimator instead of O(n²) re-serialization
   const serialized = JSON.stringify(messages);
   if (serialized.length > MAX_INIT_BYTES) {
     const totalMessages = messages.length;
-    while (messages.length > 10) {
-      messages.shift();
-      if (JSON.stringify(messages).length <= MAX_INIT_BYTES) break;
-    }
+    
+    // Single-pass estimator: compute average message size and calculate keepCount
+    const avgMessageSize = serialized.length / messages.length;
+    const targetSize = MAX_INIT_BYTES * 0.9; // keep at 90% of budget to be safe
+    const estimatedKeepCount = Math.max(10, Math.floor(targetSize / avgMessageSize));
+    const startIdx = Math.max(0, messages.length - estimatedKeepCount);
+    
+    const truncatedMessages = messages.slice(startIdx);
+    
     return {
       type: "init_state",
-      messages: messages as InitStateEvent["messages"],
+      messages: truncatedMessages as InitStateEvent["messages"],
       tools: tools ?? [],
       truncated: true,
       totalMessages,

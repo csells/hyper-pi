@@ -1,0 +1,1 @@
+Let me verify the auth.rs code compiles as part of the main binary:

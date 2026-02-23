@@ -1,0 +1,21 @@
+{
+  "id": "task-3",
+  "title": "Fix RemoteAgent event listener leak",
+  "status": "done",
+  "depends_on": [],
+  "created_at": "2026-02-23T14:11:59.814Z",
+  "updated_at": "2026-02-23T14:20:18.690Z",
+  "attempt_count": 2,
+  "started_at": "2026-02-23T14:18:03.867Z",
+  "base_commit": "39f2f358294cb996aa0dffbb5bc6e22db819bc38",
+  "completed_at": "2026-02-23T14:20:18.690Z",
+  "summary": "Fixed RemoteAgent event listener leak by tracking messageHandler reference, removing listeners on disconnect, and adding onInitState/onError callbacks. All 15 tests pass including new tests for listener cleanup and callback handling.",
+  "evidence": {
+    "commits": [
+      "ffc8fbb8d09c067ee00bdc8fc72a444fd346e9dd"
+    ],
+    "tests": [
+      "npm test -- pi-de/src/RemoteAgent.test.ts (15 passed)"
+    ]
+  }
+}

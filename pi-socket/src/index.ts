@@ -265,14 +265,16 @@ export default function piSocket(pi: ExtensionAPI) {
 function safeSerialize(value: unknown): string {
   try {
     return JSON.stringify(value);
-  } catch {
+  } catch (err) {
+    log.error("safeSerialize", err);
     try {
       return JSON.stringify(value, (_key, val) => {
         if (typeof val === "bigint") return val.toString();
         if (typeof val === "function") return undefined;
         return val;
       });
-    } catch {
+    } catch (err2) {
+      log.error("safeSerialize", err2);
       return '{"type":"error","message":"non-serializable event"}';
     }
   }

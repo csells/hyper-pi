@@ -1,0 +1,10 @@
+{
+  "runId": "f3f35e8c",
+  "agent": "crew-worker",
+  "index": 0,
+  "exitCode": 0,
+  "durationMs": 14974,
+  "tokens": 480,
+  "truncated": false,
+  "error": "{\"type\":\"error\",\"error\":{\"details\":null,\"type\":\"overloaded_error\",\"message\":\"Overloaded\"},\"request_id\":\"req_011CYR8zn4UkcWB7ZyBzXnVM\"}"
+}

@@ -300,7 +300,7 @@ fn handle_registry_ws(
         stream.try_clone().expect("clone for writer"),
     )));
     let mut read_stream = stream;
-    let _ = read_stream.set_read_timeout(Some(Duration::from_millis(100)));
+    let _ = read_stream.set_read_timeout(Some(Duration::from_millis(2000)));
 
     let mut read_codec = FrameCodec::server();
     let mut read_buf = asupersync::bytes::BytesMut::with_capacity(8192);
@@ -434,8 +434,8 @@ fn handle_proxy_ws(
         let nodes = state.nodes.read().expect("nodes lock poisoned");
         match nodes.get(node_id) {
             Some(node) if node.status == "active" => {
-                // Connect to localhost since the agent is on this machine
-                ("127.0.0.1".to_string(), node.port)
+                // Connect to the agent's machine address
+                (node.machine.clone(), node.port)
             }
             Some(_) => {
                 let mut w = WsWriter::new(stream);
@@ -485,8 +485,27 @@ fn handle_proxy_ws(
             return;
         }
         let mut resp_buf = [0u8; 1024];
-        let _ = agent_stream.read(&mut resp_buf);
-        // Accept any 101 response — the agent is a local trusted server
+        let n = match agent_stream.read(&mut resp_buf) {
+            Ok(n) if n > 0 => n,
+            _ => {
+                let mut w = WsWriter::new(stream);
+                let err =
+                    serde_json::json!({ "error": "Agent handshake failed: no response" }).to_string();
+                let _ = w.send_text(&err);
+                return;
+            }
+        };
+        
+        // Validate the handshake response contains "101 Switching Protocols"
+        let resp_str = String::from_utf8_lossy(&resp_buf[..n]);
+        if !resp_str.contains("101") {
+            warn!(node_id, "Agent handshake validation failed: response does not contain 101");
+            let mut w = WsWriter::new(stream);
+            let err =
+                serde_json::json!({ "error": "Agent handshake failed: invalid response" }).to_string();
+            let _ = w.send_text(&err);
+            return;
+        }
     }
 
     // Bidirectional relay: dashboard ↔ agent

@@ -1,0 +1,12 @@
+{
+  "id": "task-7",
+  "title": "Fix pi-socket: truncation perf, async boundary, logger",
+  "status": "in_progress",
+  "depends_on": [],
+  "created_at": "2026-02-23T14:12:43.681Z",
+  "updated_at": "2026-02-23T14:20:01.132Z",
+  "attempt_count": 5,
+  "started_at": "2026-02-23T14:20:01.057Z",
+  "base_commit": "39f2f358294cb996aa0dffbb5bc6e22db819bc38",
+  "assigned_to": "JadeIce"
+}

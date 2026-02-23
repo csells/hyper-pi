@@ -1,0 +1,1 @@
+**Fix 3b: Fix proxy thread leak - shutdown agent stream and join agent_to_dash thread**

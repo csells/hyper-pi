@@ -177,4 +177,44 @@ describe("buildInitState", () => {
     const result = buildInitState(entries, []);
     expect(result.messages).toEqual([]);
   });
+
+  it("truncates with >500KB payload producing fewer messages", () => {
+    // Create messages with large content to exceed 500KB total
+    const largeText = "x".repeat(10000); // 10KB per message
+    const entries = Array.from({ length: 60 }, (_, i) => ({
+      type: "message",
+      message: {
+        role: i % 2 === 0 ? "user" : "assistant",
+        content: largeText,
+        timestamp: i * 1000,
+      },
+    }));
+
+    const result = buildInitState(entries, []);
+    
+    // Should be truncated (fewer messages than input)
+    expect(result.truncated).toBe(true);
+    expect(result.totalMessages).toBe(60);
+    expect(result.messages.length).toBeLessThan(60);
+    // Should keep at least 10 messages as per the estimator logic
+    expect(result.messages.length).toBeGreaterThanOrEqual(10);
+  });
+
+  it("truncated result has truncated flag and totalMessages", () => {
+    const largeText = "x".repeat(50000);
+    const entries = Array.from({ length: 20 }, (_, i) => ({
+      type: "message",
+      message: {
+        role: i % 2 === 0 ? "user" : "assistant",
+        content: largeText,
+        timestamp: i * 1000,
+      },
+    }));
+
+    const result = buildInitState(entries, []);
+    
+    expect(result.truncated).toBe(true);
+    expect(result.totalMessages).toBe(20);
+    expect(result.type).toBe("init_state");
+  });
 });

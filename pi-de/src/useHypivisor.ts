@@ -13,14 +13,18 @@ export function useHypivisor(port: number, token: string): UseHypivisorReturn {
   const [status, setStatus] = useState<HypivisorStatus>("connecting");
   const [nodes, setNodes] = useState<NodeInfo[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
+  const initReceivedRef = useRef<boolean>(false);
 
   const handleEvent = useCallback((data: HypivisorEvent) => {
     switch (data.event) {
       case "init":
+        initReceivedRef.current = true;
         setNodes(data.nodes);
         break;
 
       case "node_joined":
+        // Drop incremental events until init arrives
+        if (!initReceivedRef.current) return;
         setNodes((prev) => {
           const filtered = prev.filter((n) => n.id !== data.node.id);
           return [...filtered, { ...data.node, status: "active" as const }];
@@ -28,6 +32,8 @@ export function useHypivisor(port: number, token: string): UseHypivisorReturn {
         break;
 
       case "node_offline":
+        // Drop incremental events until init arrives
+        if (!initReceivedRef.current) return;
         setNodes((prev) =>
           prev.map((n) =>
             n.id === data.id ? { ...n, status: "offline" as const } : n,
@@ -36,6 +42,8 @@ export function useHypivisor(port: number, token: string): UseHypivisorReturn {
         break;
 
       case "node_removed":
+        // Drop incremental events until init arrives
+        if (!initReceivedRef.current) return;
         setNodes((prev) => prev.filter((n) => n.id !== data.id));
         break;
     }
@@ -51,9 +59,12 @@ export function useHypivisor(port: number, token: string): UseHypivisorReturn {
       // Close previous connection before creating a new one
       if (ws) {
         ws.onclose = null; // prevent close → reconnect loop
+        ws.onmessage = null; // prevent ghost messages from old WS
         ws.close();
       }
-      const url = `ws://localhost:${port}/ws${token ? `?token=${token}` : ""}`;
+      // Reset initReceived flag for new connection
+      initReceivedRef.current = false;
+      const url = `ws://${window.location.hostname}:${port}/ws${token ? `?token=${token}` : ""}`;
       ws = new WebSocket(url);
       wsRef.current = ws;
 
@@ -62,15 +73,17 @@ export function useHypivisor(port: number, token: string): UseHypivisorReturn {
       ws.onmessage = (event) => {
         const data = JSON.parse(event.data) as HypivisorEvent | RpcResponse;
 
-        // RPC response (has id field)
-        if ("id" in data && data.id) {
-          handleRpcResponse(data as RpcResponse);
+        // Push event (check first, before checking for RPC response)
+        // because node_offline and node_removed also have an 'id' field
+        if ("event" in data) {
+          handleEvent(data as HypivisorEvent);
           return;
         }
 
-        // Push event
-        if ("event" in data) {
-          handleEvent(data as HypivisorEvent);
+        // RPC response (has id field but no event field)
+        if ("id" in data && data.id) {
+          handleRpcResponse(data as RpcResponse);
+          return;
         }
       };
 
@@ -92,6 +105,7 @@ export function useHypivisor(port: number, token: string): UseHypivisorReturn {
       clearTimeout(reconnectTimer);
       if (ws) {
         ws.onclose = null; // prevent close → reconnect after disposal
+        ws.onmessage = null; // prevent ghost messages after disposal
         ws.close();
       }
       wsRef.current = null;
