@@ -102,24 +102,29 @@ The default hypivisor port (31415) is a reference to π (3.1415…).
 - **R-HV-17:** Events MUST be pushed to clients via a broadcast channel, not polling.
 
 ### 2.5 Stale Node Cleanup
-- **R-HV-18:** The hypivisor MUST remove nodes that have been in `"offline"` status for longer than a configurable TTL (default: 1 hour).
+- **R-HV-18:** The hypivisor MUST remove nodes that have been in `"offline"` status for longer than a configurable TTL (default: 30 seconds).
 - **R-HV-19:** When a stale node is removed, the hypivisor MUST broadcast a `node_removed` event with the node's `id`.
 - **R-HV-20:** The TTL MUST be configurable via a CLI argument (`--node-ttl` / `-t`, in seconds).
+- **R-HV-20a:** The cleanup sweep MUST also remove `"active"` nodes whose `last_seen` heartbeat timestamp exceeds 3× the TTL, to catch ghost registrations from crashed processes with half-open TCP connections.
 
-### 2.6 Process Spawning
+### 2.6 Multiple Agents Per Directory
+- **R-HV-20b:** Multiple pi agents MAY run simultaneously in the same project directory. Each agent has a unique session ID and a unique port. The hypivisor MUST NOT evict, deduplicate, or collapse nodes based on `cwd`. The only valid eviction key is `machine:port` — because a port on a machine can only belong to one process.
+- **R-HV-20c:** Pi-DE MUST NOT deduplicate nodes by `cwd`. Two agents in the same directory MUST appear as two separate entries in the roster.
+
+### 2.7 Process Spawning
 - **R-HV-21:** The `spawn_agent` method MUST create any specified `new_folder` using recursive directory creation before spawning.
 - **R-HV-22:** The `spawn_agent` method MUST spawn the `pi` CLI as a background child process in the target directory.
 - **R-HV-23:** The spawned process's registration will happen automatically via the pi-socket extension—the hypivisor does not need to manually register it.
 - **R-HV-24:** The `spawn_agent` method MUST reject paths that resolve outside the user's home directory. The resolved (canonicalized) path MUST start with `$HOME`.
 - **R-HV-25:** The `spawn_agent` method MUST return an error if the target path does not exist and no `new_folder` is specified.
 
-### 2.7 Directory Listing
+### 2.8 Directory Listing
 - **R-HV-26:** The `list_directories` method MUST skip hidden entries (names starting with `.`).
 - **R-HV-27:** The `list_directories` method MUST follow symlinks to directories (include them in the listing) but MUST NOT follow symlinks that point outside `$HOME`.
 - **R-HV-28:** The `list_directories` method MUST silently skip entries that return permission errors. It MUST NOT fail the entire request due to a single unreadable entry.
 - **R-HV-29:** The `list_directories` method MUST reject paths that resolve outside the user's home directory.
 
-### 2.8 Technology
+### 2.9 Technology
 - **R-HV-30:** The hypivisor MUST be written in Rust.
 - **R-HV-31:** The hypivisor MUST use the `clap` crate for CLI argument parsing.
 - **R-HV-32:** The registry MUST be thread-safe (e.g., `Arc<RwLock<HashMap>>`).

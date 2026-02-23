@@ -74,16 +74,16 @@ fn handle_register(
             .nodes
             .write()
             .expect("nodes lock poisoned in register");
-        // Evict stale nodes on the same machine by port OR cwd.
-        // machine:port catches port reuse within the same machine.
-        // machine:cwd catches restart-in-same-directory with different port
-        // (e.g., old port in TIME_WAIT so portfinder picks a new one).
+        // Evict stale nodes on the same machine:port. A port on a machine
+        // can only belong to one process, so any prior registration with the
+        // same machine:port is stale. Do NOT evict by cwd — multiple pi
+        // agents can legitimately run in the same directory.
         evicted = nodes
             .iter()
             .filter(|(existing_id, n)| {
                 *existing_id != &node.id
                     && n.machine == node.machine
-                    && (n.port == node.port || n.cwd == node.cwd)
+                    && n.port == node.port
             })
             .map(|(id, _)| id.clone())
             .collect();
@@ -93,7 +93,7 @@ fn handle_register(
         nodes.insert(node.id.clone(), node.clone());
     }
     for id in &evicted {
-        info!(node_id = %id, "Evicted stale node (same machine:port or machine:cwd)");
+        info!(node_id = %id, "Evicted stale node (same machine:port)");
         let event =
             serde_json::json!({ "event": "node_removed", "id": id }).to_string();
         let _ = state.tx.send(cx, event);
@@ -351,10 +351,10 @@ mod tests {
     }
 
     #[test]
-    fn register_evicts_same_cwd_different_port() {
+    fn register_keeps_same_cwd_different_port() {
         let cx = crate::ephemeral_cx();
         let reg = make_registry();
-        // First agent registers on port 8081
+        // Multiple agents in the same directory is a valid use case
         let req = RpcRequest {
             id: Some("1".into()),
             method: "register".into(),
@@ -365,41 +365,11 @@ mod tests {
         };
         dispatch(&cx, req, &reg);
 
-        // Same machine + cwd, different port → old entry evicted
         let req = RpcRequest {
             id: Some("2".into()),
             method: "register".into(),
             params: Some(serde_json::json!({
                 "id": "host-session-b", "machine": "host", "cwd": "/project-a",
-                "port": 8082, "status": "active"
-            })),
-        };
-        dispatch(&cx, req, &reg);
-        assert_eq!(reg.nodes.read().unwrap().len(), 1);
-        assert!(reg.nodes.read().unwrap().contains_key("host-session-b"));
-        assert!(!reg.nodes.read().unwrap().contains_key("host-session-a"));
-    }
-
-    #[test]
-    fn register_keeps_different_cwd_same_machine() {
-        let cx = crate::ephemeral_cx();
-        let reg = make_registry();
-        // Two agents on same machine, different cwds = both valid
-        let req = RpcRequest {
-            id: Some("1".into()),
-            method: "register".into(),
-            params: Some(serde_json::json!({
-                "id": "host-session-a", "machine": "host", "cwd": "/project-a",
-                "port": 8081, "status": "active"
-            })),
-        };
-        dispatch(&cx, req, &reg);
-
-        let req = RpcRequest {
-            id: Some("2".into()),
-            method: "register".into(),
-            params: Some(serde_json::json!({
-                "id": "host-session-b", "machine": "host", "cwd": "/project-b",
                 "port": 8082, "status": "active"
             })),
         };

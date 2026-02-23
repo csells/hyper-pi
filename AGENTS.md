@@ -36,9 +36,13 @@ pi-socket broadcasts real-time events to all clients:
 
 Pi-DE's `RemoteAgent` translates these into pi-web-ui's `AgentEvent` interface, so `<agent-interface>` renders full conversations with markdown, code blocks, thinking sections, and tool cards — identical to pi's own web UI.
 
-## Key Constraint
+## Key Constraints
 
-pi itself is never modified. Everything is additive — a global extension, an external daemon, and an external web app.
+### pi is never modified
+Everything is additive — a global extension, an external daemon, and an external web app.
+
+### Multiple agents per directory is a FIRST-CLASS use case
+**Users can run THOUSANDS of pi agents in the same project folder.** This is not an edge case — it is a core architectural requirement. Every agent gets its own unique session ID and its own unique port. The only thing that physically identifies a unique agent is `machine:port`. NEVER use `machine:cwd` to deduplicate, evict, or collapse agents. Two agents in the same directory are two separate agents, period.
 
 ## Read Before Assuming
 

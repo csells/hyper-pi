@@ -22,12 +22,7 @@ export function useHypivisor(port: number, token: string): UseHypivisorReturn {
 
       case "node_joined":
         setNodes((prev) => {
-          // Deduplicate by id AND by machine+cwd (defense-in-depth against ghosts)
-          const filtered = prev.filter(
-            (n) =>
-              n.id !== data.node.id &&
-              !(n.machine === data.node.machine && n.cwd === data.node.cwd),
-          );
+          const filtered = prev.filter((n) => n.id !== data.node.id);
           return [...filtered, { ...data.node, status: "active" as const }];
         });
         break;
