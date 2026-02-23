@@ -45,6 +45,11 @@ export class RemoteAgent {
   private _state: AgentState;
   private listeners: Set<Listener> = new Set();
   private ws: WebSocket | null = null;
+  private messageHandler: ((event: MessageEvent) => void) | null = null;
+
+  // Callbacks for special events (allows useAgent to react to these)
+  onInitState: ((event: InitStateEvent) => void) | null = null;
+  onError: ((error: string) => void) | null = null;
 
   // Required by AgentInterface (prevents it from overriding with proxy/key defaults)
   streamFn: unknown = () => {};
@@ -85,16 +90,25 @@ export class RemoteAgent {
 
   /** Connect to a pi-socket agent WebSocket and start processing events. */
   connect(ws: WebSocket): void {
+    // Clean up any existing listener before adding a new one
+    this.disconnect();
+    
     this.ws = ws;
-    ws.addEventListener("message", (event) => {
+    this.messageHandler = (event: MessageEvent) => {
       const data = JSON.parse(event.data as string) as SocketEvent;
       this.handleSocketEvent(data);
-    });
+    };
+    ws.addEventListener("message", this.messageHandler);
   }
 
   /** Disconnect from the current WebSocket (does not close it). */
   disconnect(): void {
+    // Remove the event listener from the old WebSocket before nulling it
+    if (this.ws && this.messageHandler) {
+      this.ws.removeEventListener("message", this.messageHandler);
+    }
     this.ws = null;
+    this.messageHandler = null;
     this._state = {
       ...this._state,
       messages: [],
@@ -137,7 +151,15 @@ export class RemoteAgent {
 
   // ── Socket event handling ─────────────────────────────────────
 
-  private handleSocketEvent(event: SocketEvent): void {
+  private handleSocketEvent(event: any): void {
+    // Check for proxy error messages (e.g., agent not found)
+    if ("error" in event && typeof event.error === "string") {
+      if (this.onError) {
+        this.onError(event.error);
+      }
+      return;
+    }
+
     if (event.type === "init_state") {
       this.handleInitState(event as InitStateEvent);
       return;
@@ -213,6 +235,10 @@ export class RemoteAgent {
       streamMessage: null,
       pendingToolCalls: new Set(),
     };
+    // Call onInitState callback if provided (allows useAgent to get truncation info)
+    if (this.onInitState) {
+      this.onInitState(event);
+    }
     this.emit({ type: "agent_end", messages: this._state.messages });
   }
 }

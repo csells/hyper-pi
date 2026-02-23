@@ -13,7 +13,15 @@ function createMockWebSocket() {
       if (!listeners.has(type)) listeners.set(type, []);
       listeners.get(type)!.push(fn);
     },
-    removeEventListener() {},
+    removeEventListener(type: string, fn: (event: { data: string }) => void) {
+      const typeListeners = listeners.get(type);
+      if (typeListeners) {
+        const index = typeListeners.indexOf(fn);
+        if (index > -1) {
+          typeListeners.splice(index, 1);
+        }
+      }
+    },
     // Simulate receiving a message from pi-socket
     receive(data: unknown) {
       for (const fn of listeners.get("message") ?? []) {
@@ -21,7 +29,7 @@ function createMockWebSocket() {
       }
     },
   };
-  return { ws: ws as unknown as WebSocket, sent, receive: ws.receive.bind(ws) };
+  return { ws: ws as unknown as WebSocket, sent, receive: ws.receive.bind(ws), listeners };
 }
 
 describe("RemoteAgent", () => {
@@ -226,6 +234,100 @@ describe("RemoteAgent", () => {
 
       expect(lateEvents.length).toBeGreaterThanOrEqual(1);
       expect(lateEvents[0].type).toBe("agent_end");
+    });
+  });
+
+  describe("event listener cleanup", () => {
+    it("disconnect removes event listener (old WS messages don't fire)", () => {
+      const { ws, receive, listeners } = createMockWebSocket();
+      agent.connect(ws);
+
+      expect(listeners.get("message")!.length).toBe(1);
+
+      agent.disconnect();
+
+      expect(listeners.get("message")!.length).toBe(0);
+
+      // Send a message to the old WS — listener should not fire
+      events.length = 0;
+      receive({ type: "init_state", messages: [], tools: [] });
+
+      // No events should be emitted because the listener was removed
+      expect(events).toHaveLength(0);
+    });
+
+    it("connect→disconnect→connect cycle doesn't leak listeners", () => {
+      const { ws, listeners } = createMockWebSocket();
+
+      // First connect
+      agent.connect(ws);
+      expect(listeners.get("message")!.length).toBe(1);
+
+      // Disconnect
+      agent.disconnect();
+      expect(listeners.get("message")!.length).toBe(0);
+
+      // Second connect (same WS)
+      agent.connect(ws);
+      expect(listeners.get("message")!.length).toBe(1);
+
+      // Disconnect
+      agent.disconnect();
+      expect(listeners.get("message")!.length).toBe(0);
+
+      // Third connect
+      agent.connect(ws);
+      expect(listeners.get("message")!.length).toBe(1);
+    });
+
+    it("connect calls disconnect first to clean up existing listener", () => {
+      const { ws, listeners } = createMockWebSocket();
+
+      agent.connect(ws);
+      expect(listeners.get("message")!.length).toBe(1);
+
+      // Calling connect again should clean up the old listener first
+      agent.connect(ws);
+      expect(listeners.get("message")!.length).toBe(1);
+    });
+  });
+
+  describe("onInitState callback", () => {
+    it("onInitState callback fires on init_state", () => {
+      const { ws, receive } = createMockWebSocket();
+      agent.connect(ws);
+
+      const initStateEvents: any[] = [];
+      agent.onInitState = (event) => initStateEvents.push(event);
+
+      const userMsg = { role: "user", content: "hello", timestamp: 1000 };
+      receive({
+        type: "init_state",
+        messages: [userMsg],
+        tools: [{ name: "bash", description: "Run commands" }],
+      });
+
+      expect(initStateEvents).toHaveLength(1);
+      expect(initStateEvents[0].type).toBe("init_state");
+      expect(initStateEvents[0].messages).toEqual([userMsg]);
+      expect(initStateEvents[0].tools).toHaveLength(1);
+    });
+
+    it("onInitState callback not called if not set", () => {
+      const { ws, receive } = createMockWebSocket();
+      agent.connect(ws);
+
+      // Don't set agent.onInitState
+
+      receive({
+        type: "init_state",
+        messages: [],
+        tools: [],
+      });
+
+      // Should not throw and agent_end should still be emitted
+      expect(events).toHaveLength(1);
+      expect(events[0].type).toBe("agent_end");
     });
   });
 });
