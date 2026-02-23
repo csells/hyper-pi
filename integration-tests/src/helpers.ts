@@ -76,6 +76,33 @@ export class BufferedWs {
     });
   }
 
+  /**
+   * Read messages until one with a matching JSON-RPC `id` is found.
+   * Skips any broadcast messages (those without an `id` field) that arrive first.
+   */
+  async nextRpc(id: string): Promise<Record<string, unknown>> {
+    for (;;) {
+      const msg = await this.next();
+      if (msg.id === id) return msg;
+      // Skip broadcasts and other non-matching messages
+    }
+  }
+
+  /**
+   * Drain `count` messages from the queue (e.g., broadcasts after a mutation).
+   * If count is omitted, drains all currently-queued messages without waiting.
+   */
+  async drain(count?: number): Promise<void> {
+    if (count !== undefined) {
+      for (let i = 0; i < count; i++) {
+        await this.next();
+      }
+    } else {
+      // Drain only what's already buffered
+      this.queue.length = 0;
+    }
+  }
+
   /** Send a JSON-RPC request. */
   sendRpc(id: string, method: string, params?: Record<string, unknown>): void {
     this.ws.send(JSON.stringify({ id, method, params }));

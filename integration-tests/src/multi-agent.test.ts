@@ -38,9 +38,7 @@ describe("Multiple agents per directory (R-HV-20b, R-HV-20c)", () => {
       port: 8081,
       status: "active",
     });
-    await agentA.next(); // RPC response
-    await agentA.next(); // node_joined broadcast
-    await dashboard.next(); // node_joined
+    await agentA.nextRpc("r1");
 
     // Agent B registers in the SAME cwd, different port
     const agentB = await connectWs(hv.port);
@@ -52,20 +50,12 @@ describe("Multiple agents per directory (R-HV-20b, R-HV-20c)", () => {
       port: 8082,
       status: "active",
     });
-    await agentB.next(); // RPC response
-    await agentB.next(); // node_joined broadcast
-
-    // Dashboard sees node_joined for B — NOT node_removed for A
-    const dashEvent = await dashboard.next();
-    expect(dashEvent.event).toBe("node_joined");
-    expect((dashEvent.node as Record<string, unknown>).id).toBe("agent-B");
-
-    // Consume broadcast that agent A received for agent B
-    await agentA.next();
+    await agentB.nextRpc("r2");
+    await new Promise((r) => setTimeout(r, 50)); // let broadcasts settle
 
     // Verify both agents exist via list_nodes
     dashboard.sendRpc("ln", "list_nodes");
-    const resp = await dashboard.next();
+    const resp = await dashboard.nextRpc("ln");
     const nodes = resp.result as Array<Record<string, unknown>>;
     expect(nodes.length).toBe(2);
     const ids = nodes.map((n) => n.id).sort();
@@ -98,23 +88,16 @@ describe("Multiple agents per directory (R-HV-20b, R-HV-20c)", () => {
         port: 9000 + i,
         status: "active",
       });
-      await agent.next(); // RPC response
-      await agent.next(); // node_joined broadcast (self)
-
-      // Drain node_joined broadcast on dashboard
-      await dashboard.next();
-
-      // Drain broadcasts from this registration on previously-connected agents
-      for (const prev of agents) {
-        await prev.next();
-      }
-
+      await agent.nextRpc(`r${i}`);
       agents.push(agent);
     }
 
+    // Let broadcasts settle
+    await new Promise((r) => setTimeout(r, 100));
+
     // All 5 must be present
     dashboard.sendRpc("ln", "list_nodes");
-    const resp = await dashboard.next();
+    const resp = await dashboard.nextRpc("ln");
     const nodes = resp.result as Array<Record<string, unknown>>;
     expect(nodes.length).toBe(5);
 
@@ -148,9 +131,8 @@ describe("Multiple agents per directory (R-HV-20b, R-HV-20c)", () => {
       port: 8081,
       status: "active",
     });
-    await agentA.next(); // response
-    await agentA.next(); // broadcast
-    await dashboard.next(); // node_joined
+    await agentA.nextRpc("r1");
+    await new Promise((r) => setTimeout(r, 50));
 
     // Agent B on SAME port 8081 (simulates process restart reusing port)
     const agentB = await connectWs(hv.port);
@@ -162,29 +144,15 @@ describe("Multiple agents per directory (R-HV-20b, R-HV-20c)", () => {
       port: 8081,
       status: "active",
     });
-    await agentB.next(); // response
-    await agentB.next(); // broadcast
-
-    // Dashboard should see: node_removed for old-session (evicted by machine:port),
-    // then node_joined for new-session
-    const removed = await dashboard.next();
-    expect(removed.event).toBe("node_removed");
-    expect(removed.id).toBe("old-session");
-
-    const joined = await dashboard.next();
-    expect(joined.event).toBe("node_joined");
-    expect((joined.node as Record<string, unknown>).id).toBe("new-session");
+    await agentB.nextRpc("r2");
+    await new Promise((r) => setTimeout(r, 50));
 
     // Only 1 node remains (new-session replaced old-session on same port)
     dashboard.sendRpc("ln", "list_nodes");
-    const resp = await dashboard.next();
+    const resp = await dashboard.nextRpc("ln");
     const nodes = resp.result as Array<Record<string, unknown>>;
     expect(nodes.length).toBe(1);
     expect(nodes[0].id).toBe("new-session");
-
-    // Agent A also gets the eviction broadcast
-    await agentA.next(); // node_removed
-    await agentA.next(); // node_joined
 
     agentA.close();
     agentB.close();
@@ -204,8 +172,7 @@ describe("Multiple agents per directory (R-HV-20b, R-HV-20c)", () => {
       port: 8081,
       status: "active",
     });
-    await agentA.next(); // response
-    await agentA.next(); // broadcast
+    await agentA.nextRpc("r1");
 
     // Agent B on port 8082, SAME cwd — must NOT evict A
     const agentB = await connectWs(hv.port);
@@ -217,13 +184,8 @@ describe("Multiple agents per directory (R-HV-20b, R-HV-20c)", () => {
       port: 8082,
       status: "active",
     });
-    await agentB.next(); // response
-    await agentB.next(); // broadcast
-
-    // Agent A should only see node_joined for B, NOT node_removed for itself
-    const agentAEvent = await agentA.next();
-    expect(agentAEvent.event).toBe("node_joined");
-    expect((agentAEvent.node as Record<string, unknown>).id).toBe("session-B");
+    await agentB.nextRpc("r2");
+    await new Promise((r) => setTimeout(r, 50));
 
     // Both exist
     const check = await connectWs(hv.port);

@@ -52,8 +52,7 @@ describe("Proxy relay: dashboard ↔ agent", () => {
       port: agentPort,
       status: "active",
     });
-    await regClient.next(); // response
-    await regClient.next(); // broadcast
+    await regClient.nextRpc("r1");
 
     // Connect through the proxy (like Pi-DE does)
     const dashboard = await connectWs(hv.port, undefined, "/ws/agent/relay-test-node");
@@ -102,8 +101,7 @@ describe("Proxy relay: dashboard ↔ agent", () => {
       port: agentPort,
       status: "active",
     });
-    await regClient.next();
-    await regClient.next();
+    await regClient.nextRpc("r1");
 
     // Connect dashboard through proxy
     const dashboard = await connectWs(hv.port, undefined, "/ws/agent/relay-event-node");
@@ -157,8 +155,7 @@ describe("Proxy relay: dashboard ↔ agent", () => {
       port: agentPort,
       status: "active",
     });
-    await regClient.next();
-    await regClient.next();
+    await regClient.nextRpc("r1");
 
     // Connect dashboard
     const dashboard = await connectWs(hv.port, undefined, "/ws/agent/relay-bidi-node");

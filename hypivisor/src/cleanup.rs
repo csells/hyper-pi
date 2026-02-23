@@ -14,14 +14,13 @@ pub fn cleanup_stale_nodes(cx: &Cx, state: &Registry) {
     {
         let nodes = state.nodes.read().expect("nodes lock poisoned in cleanup");
         for (id, node) in nodes.iter() {
-            let stale = match node.status.as_str() {
-                "offline" => node
+            let stale = match node.status {
+                crate::state::NodeStatus::Offline => node
                     .offline_since
                     .is_some_and(|since| now - since > ttl),
-                "active" => node
+                crate::state::NodeStatus::Active => node
                     .last_seen
                     .is_some_and(|seen| now - seen > active_ttl),
-                _ => false,
             };
             if stale {
                 to_remove.push(id.clone());
@@ -33,10 +32,9 @@ pub fn cleanup_stale_nodes(cx: &Cx, state: &Registry) {
         let mut nodes = state.nodes.write().expect("nodes lock poisoned in cleanup");
         for id in &to_remove {
             // Re-check: node may have changed between read and write locks
-            let still_stale = nodes.get(id).is_some_and(|n| match n.status.as_str() {
-                "offline" => n.offline_since.is_some_and(|since| now - since > ttl),
-                "active" => n.last_seen.is_some_and(|seen| now - seen > active_ttl),
-                _ => false,
+            let still_stale = nodes.get(id).is_some_and(|n| match n.status {
+                crate::state::NodeStatus::Offline => n.offline_since.is_some_and(|since| now - since > ttl),
+                crate::state::NodeStatus::Active => n.last_seen.is_some_and(|seen| now - seen > active_ttl),
             });
             if still_stale {
                 nodes.remove(id);
@@ -54,7 +52,7 @@ pub fn cleanup_stale_nodes(cx: &Cx, state: &Registry) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::state::{AppState, NodeInfo};
+    use crate::state::{AppState, NodeInfo, NodeStatus};
     use asupersync::channel::broadcast;
     use std::{
         collections::HashMap,
@@ -84,7 +82,7 @@ mod tests {
                 machine: "host".into(),
                 cwd: "/tmp".into(),
                 port: 8080,
-                status: "active".into(),
+                status: NodeStatus::Active,
                 offline_since: None,
                 last_seen: Some(Utc::now().timestamp()),
             },
@@ -105,7 +103,7 @@ mod tests {
                 machine: "host".into(),
                 cwd: "/tmp".into(),
                 port: 8080,
-                status: "active".into(),
+                status: NodeStatus::Active,
                 offline_since: None,
                 last_seen: None,
             },
@@ -125,7 +123,7 @@ mod tests {
                 machine: "host".into(),
                 cwd: "/tmp".into(),
                 port: 8080,
-                status: "active".into(),
+                status: NodeStatus::Active,
                 offline_since: None,
                 last_seen: Some(Utc::now().timestamp() - 200), // well past 3×TTL
             },
@@ -145,7 +143,7 @@ mod tests {
                 machine: "host".into(),
                 cwd: "/tmp".into(),
                 port: 8080,
-                status: "offline".into(),
+                status: NodeStatus::Offline,
                 offline_since: Some(Utc::now().timestamp()),
                 last_seen: None,
             },
@@ -165,7 +163,7 @@ mod tests {
                 machine: "host".into(),
                 cwd: "/tmp".into(),
                 port: 8080,
-                status: "offline".into(),
+                status: NodeStatus::Offline,
                 offline_since: Some(Utc::now().timestamp() - 120),
                 last_seen: None,
             },
@@ -185,7 +183,7 @@ mod tests {
                 machine: "host".into(),
                 cwd: "/tmp".into(),
                 port: 8080,
-                status: "offline".into(),
+                status: NodeStatus::Offline,
                 offline_since: Some(Utc::now().timestamp() - 120),
                 last_seen: None,
             },
@@ -195,7 +193,7 @@ mod tests {
         {
             let mut nodes = reg.nodes.write().unwrap();
             let node = nodes.get_mut("n1").unwrap();
-            node.status = "active".to_string();
+            node.status = NodeStatus::Active;
             node.offline_since = None;
             node.last_seen = Some(Utc::now().timestamp());
         }

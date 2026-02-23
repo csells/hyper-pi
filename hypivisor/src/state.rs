@@ -6,13 +6,20 @@ use std::{
     sync::{Arc, RwLock},
 };
 
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum NodeStatus {
+    Active,
+    Offline,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct NodeInfo {
     pub id: String,
     pub machine: String,
     pub cwd: String,
     pub port: u16,
-    pub status: String,
+    pub status: NodeStatus,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub offline_since: Option<i64>,
     /// Last time this node was seen alive (register or heartbeat ping).

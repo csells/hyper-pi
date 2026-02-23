@@ -1,21 +1,25 @@
-# Fix ghost nodes in useHypivisor.ts
+# Pi-socket index.ts unit tests
 
-## Problem
-When the hypivisor restarts, Pi-DE reconnects and receives BOTH an `init` snapshot AND `node_joined` broadcasts as agents re-register with NEW session IDs. Since `node_joined` filters by `n.id !== data.node.id`, entries accumulate (2→4→8). Also, `connect()` nulls `ws.onclose` but NOT `ws.onmessage` on the old WS.
+Add comprehensive unit tests for `pi-socket/src/index.ts` — the main extension module that currently has zero tests. Create `pi-socket/src/index.test.ts`.
 
-## Files
-- `pi-de/src/useHypivisor.ts`
+**Files to create/modify:**
+- `pi-socket/src/index.test.ts` (new — ~200 lines)
 
-## Changes
-1. Add `initReceived` flag — drop all incremental events (`node_joined`, `node_offline`, `node_removed`) until `init` arrives
-2. In `connect()`, null BOTH `ws.onclose` AND `ws.onmessage` before closing old WS
-3. Use `window.location.hostname` instead of hardcoded `localhost` (Codex P1-5)
+**What to test:**
+1. **broadcast()** — sends JSON to all OPEN clients, skips CLOSING/CLOSED clients
+2. **safeSerialize()** — handles BigInt, circular refs, functions, falls back to error JSON
+3. **session_start handler** — finds port via portfinder, creates WSS, calls connectToHypivisor
+4. **ws.on("message") handler** — calls `pi.sendUserMessage(text)` when idle, `pi.sendUserMessage(text, { deliverAs: "followUp" })` when busy
+5. **init_state on client connect** — calls buildInitState and sends JSON to new client
+6. **Event forwarding** — message_start, message_update, message_end, tool_execution_start/update/end all call broadcast()
+7. **session_shutdown** — sends deregister RPC, closes WSS, closes hypivisor WS
+8. **Reconnect logic** — exponential backoff (reconnectMs → double → capped at 5min), resets on success
+9. **Hypivisor URL validation** — invalid URL sets hypivisorUrlValid=false, stops reconnects
+10. **shutdownRequested flag** — prevents reconnect after shutdown
 
-## Tests
-Add tests in `pi-de/src/useHypivisor.test.ts`:
-- Test: incremental events before init are dropped
-- Test: init replaces full node list
-- Test: reconnect nulls old WS handlers
+**Mock approach:** Create mock `ExtensionAPI` with `on()`, `sendUserMessage()`, `getAllTools()`, mock `ctx` with `sessionManager`, `isIdle()`, `ui.notify()`. Use vitest's `vi.mock()` for `ws` and `portfinder` modules. Export internal functions or test through the public extension function.
 
-## Constraint
-NEVER deduplicate nodes by cwd. Only `id` is valid for dedup in node_joined.
+**Acceptance criteria:**
+- All 10 areas tested with positive and negative cases (~15-20 tests)
+- Tests pass with `cd pi-socket && npm test`
+- No changes to production code (or minimal refactoring to enable testability without changing behavior)

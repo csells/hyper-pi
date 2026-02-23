@@ -1,18 +1,24 @@
-# Fix hypivisor broadcast thread hang and FD leaks
+# Message round-trip integration tests (Web → Agent → Web)
 
-## Problem
-1. `rx.recv().await` blocks forever when no broadcasts arrive. `broadcast_handle.join()` hangs after client disconnect, leaking threads permanently. Currently 63 FDs for 22 connections.
-2. 100ms read timeouts cause busy-wait — 10 wakeups/sec per connection doing nothing
-3. Proxy thread leak: agent-to-dashboard thread not joined on dashboard disconnect because agent stream stays open
+Test the full message flow: send a message to a pi agent through the hypivisor proxy WebSocket, verify the agent processes it, and verify response events flow back through the proxy.
 
-## Files
-- `hypivisor/src/main.rs`
+**Files to create/modify:**
+- `integration-tests/src/message-roundtrip.test.ts` (new — ~150 lines)
 
-## Changes
-1. Fix broadcast thread: after read loop exits, shutdown the stream (or drop the cloned stream) to unblock the broadcast forwarder. Then set `broadcast_running = false` and join.
-2. Increase read timeout from 100ms to 2000ms for registry WS and proxy WS — reduces CPU burn by 20x while still allowing reasonable disconnect detection
-3. Fix proxy thread leak: after dashboard→agent loop breaks, shutdown the agent stream to make agent→dashboard thread's reads fail, then join
+**Tests (5-7 tests):**
+1. **Send text through proxy → agent receives it:** Connect to `/ws/agent/{nodeId}`, receive `init_state`, send plain text message, verify agent begins processing (message_start event flows back)
+2. **Full turn round-trip:** Send a simple prompt ("What is 2+2?"), verify message_start (user), message_start (assistant), streaming message_update deltas, message_end all flow back through proxy
+3. **init_state contains conversation history:** After a round-trip, disconnect and reconnect to same agent → init_state messages array includes the previous exchange
+4. **Multiple clients see same events:** Connect 2 proxy clients to same agent, send message from client A, verify client B also receives broadcast events
+5. **Follow-up message while streaming:** Send a message, then immediately send another → second message delivered as followUp (verified by both appearing in conversation)
+6. **Tools list in init_state:** init_state.tools array is non-empty and contains expected tools (bash, read, etc.)
 
-## Tests
-- Verify existing tests still pass (cargo test)
-- The integration tests already test connection/disconnection flows
+**Infrastructure:**
+- Reuse `pi-agent-helpers.ts` from Task 4 to start real pi agents in tmux
+- Connect to agent through hypivisor proxy: `ws://localhost:{hvPort}/ws/agent/{nodeId}`
+- Use `BufferedWs` from existing helpers for message queuing
+
+**Acceptance criteria:**
+- Tests pass with `cd integration-tests && npm test -- --testPathPattern message-roundtrip`
+- Tests are deterministic (polling with timeout, not fixed delays)
+- Clean up all WebSocket connections and tmux sessions

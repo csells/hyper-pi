@@ -15,11 +15,11 @@ use asupersync::types::{Budget, RegionId, TaskId};
 use asupersync::Cx;
 use chrono::Utc;
 use clap::Parser;
-use state::{AppState, NodeInfo, Registry};
+use state::{AppState, NodeInfo, NodeStatus, Registry};
 use std::{
     collections::HashMap,
     env, io,
-    net::TcpStream as StdTcpStream,
+    net::{TcpStream as StdTcpStream, ToSocketAddrs},
     sync::{Arc, Mutex, RwLock},
     time::Duration,
 };
@@ -245,6 +245,10 @@ impl WsWriter {
         use io::Write;
         self.stream.write_all(bytes)
     }
+
+    fn shutdown(&mut self) {
+        let _ = self.stream.shutdown(std::net::Shutdown::Both);
+    }
 }
 
 // ── Read-only WebSocket frame decoder ────────────────────────────────────────
@@ -366,7 +370,7 @@ fn handle_registry_ws(
                             }
                         }
                     }
-                    let response = rpc::dispatch(&cx, req, &state);
+                    let response = rpc::dispatch(&cx, req, &state, registered_node_id.as_deref());
                     let out = serde_json::to_string(&response).unwrap();
                     let mut w = writer.lock().unwrap();
                     if w.send_text(&out).is_err() {
@@ -407,7 +411,7 @@ fn handle_registry_ws(
             .write()
             .expect("nodes lock poisoned on disconnect");
         if let Some(node) = nodes.get_mut(&node_id) {
-            node.status = "offline".to_string();
+            node.status = NodeStatus::Offline;
             node.offline_since = Some(Utc::now().timestamp());
             info!(node_id = %node_id, "Node offline");
         }
@@ -416,8 +420,11 @@ fn handle_registry_ws(
         let _ = state.tx.send(&cx, event);
     }
 
-    std::thread::sleep(Duration::from_millis(50));
+    // Signal broadcast thread to stop. The thread checks broadcast_running after
+    // each recv(). Shutting down the writer's stream makes the next send_text() fail,
+    // which breaks the loop even if recv() is blocking.
     broadcast_running.store(false, std::sync::atomic::Ordering::Relaxed);
+    writer.lock().unwrap().shutdown();
     let _ = broadcast_handle.join();
 }
 
@@ -433,7 +440,7 @@ fn handle_proxy_ws(
     let (agent_host, agent_port) = {
         let nodes = state.nodes.read().expect("nodes lock poisoned");
         match nodes.get(node_id) {
-            Some(node) if node.status == "active" => {
+            Some(node) if node.status == NodeStatus::Active => {
                 // Connect to the agent's machine address
                 (node.machine.clone(), node.port)
             }
@@ -454,8 +461,27 @@ fn handle_proxy_ws(
 
     // Connect to the agent's local WebSocket
     let agent_addr = format!("{agent_host}:{agent_port}");
+    let socket_addr = match agent_addr.to_socket_addrs() {
+        Ok(mut addrs) => match addrs.next() {
+            Some(addr) => addr,
+            None => {
+                warn!(node_id, addr = %agent_addr, "No addresses resolved for agent");
+                let mut w = WsWriter::new(stream);
+                let err = serde_json::json!({ "error": "Cannot resolve agent address" }).to_string();
+                let _ = w.send_text(&err);
+                return;
+            }
+        },
+        Err(e) => {
+            warn!(node_id, addr = %agent_addr, error = %e, "Failed to resolve agent address");
+            let mut w = WsWriter::new(stream);
+            let err = serde_json::json!({ "error": format!("Cannot resolve agent: {e}") }).to_string();
+            let _ = w.send_text(&err);
+            return;
+        }
+    };
     let mut agent_stream = match StdTcpStream::connect_timeout(
-        &agent_addr.parse().unwrap(),
+        &socket_addr,
         Duration::from_secs(5),
     ) {
         Ok(s) => s,
@@ -521,8 +547,11 @@ fn handle_proxy_ws(
     )));
 
     let mut dash_read = dashboard_read;
-    let _ = dash_read.set_read_timeout(Some(Duration::from_millis(100)));
-    let _ = agent_stream.set_read_timeout(Some(Duration::from_millis(100)));
+    let _ = dash_read.set_read_timeout(Some(Duration::from_millis(2000)));
+    let _ = agent_stream.set_read_timeout(Some(Duration::from_millis(2000)));
+
+    // Clone agent stream for shutdown after the relay loop exits
+    let agent_shutdown_handle = agent_stream.try_clone().expect("clone agent for shutdown");
 
     let dash_writer_for_agent = dashboard_writer.clone();
     let agent_writer_for_agent = agent_writer.clone();
@@ -601,6 +630,9 @@ fn handle_proxy_ws(
         }
     }
 
+    // Shutdown agent stream to unblock agent→dashboard thread's reads, then join
+    use std::net::Shutdown;
+    let _ = agent_shutdown_handle.shutdown(Shutdown::Both);
     let _ = agent_to_dash.join();
 }
 

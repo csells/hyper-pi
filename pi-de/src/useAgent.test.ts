@@ -33,8 +33,8 @@ describe("useAgent", () => {
     (global as any).WebSocket = MockWebSocket;
 
     // Mock environment variables
-    import.meta.env.VITE_HYPIVISOR_PORT = "31415";
-    import.meta.env.VITE_HYPI_TOKEN = "";
+    (import.meta.env as Record<string, string>).VITE_HYPIVISOR_PORT = "31415";
+    (import.meta.env as Record<string, string>).VITE_HYPI_TOKEN = "";
   });
 
   afterEach(() => {
@@ -46,6 +46,7 @@ describe("useAgent", () => {
     const activeNode: NodeInfo = {
       id: "test-node",
       machine: "localhost",
+      cwd: "/tmp/test",
       port: 9000,
       status: "active",
     };
@@ -62,6 +63,7 @@ describe("useAgent", () => {
     const newActiveNode: NodeInfo = {
       id: "test-node-2",
       machine: "localhost",
+      cwd: "/tmp/test",
       port: 9001,
       status: "active",
     };
@@ -80,6 +82,7 @@ describe("useAgent", () => {
     const activeNode: NodeInfo = {
       id: "test-node",
       machine: "localhost",
+      cwd: "/tmp/test",
       port: 9000,
       status: "active",
     };
@@ -101,7 +104,7 @@ describe("useAgent", () => {
 
     // Simulate proxy error message through the message handler
     const messageHandler = ws.addEventListener.mock.calls.find(
-      (call) => call[0] === "message",
+      (call: [string, ...unknown[]]) => call[0] === "message",
     )?.[1];
 
     if (messageHandler) {
@@ -122,6 +125,7 @@ describe("useAgent", () => {
     const activeNode: NodeInfo = {
       id: "test-node",
       machine: "localhost",
+      cwd: "/tmp/test",
       port: 9000,
       status: "active",
     };
@@ -157,6 +161,7 @@ describe("useAgent", () => {
     const activeNode: NodeInfo = {
       id: "test-node",
       machine: "localhost",
+      cwd: "/tmp/test",
       port: 9000,
       status: "active",
     };
@@ -174,7 +179,7 @@ describe("useAgent", () => {
 
     // Simulate init_state message through the message handler
     const messageHandler = ws.addEventListener.mock.calls.find(
-      (call) => call[0] === "message",
+      (call: [string, ...unknown[]]) => call[0] === "message",
     )?.[1];
 
     if (messageHandler) {
@@ -198,6 +203,7 @@ describe("useAgent", () => {
     const activeNode: NodeInfo = {
       id: "test-node",
       machine: "localhost",
+      cwd: "/tmp/test",
       port: 9000,
       status: "active",
     };
@@ -216,6 +222,7 @@ describe("useAgent", () => {
     const activeNode: NodeInfo = {
       id: "test-node",
       machine: "localhost",
+      cwd: "/tmp/test",
       port: 9000,
       status: "offline",
     };

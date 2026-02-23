@@ -1,20 +1,30 @@
-# Fix RemoteAgent event listener leak
+# Hypivisor Rust unit test gaps (spawn.rs, fs_browser.rs)
 
-## Problem
-`RemoteAgent.connect()` uses `addEventListener("message")` but never calls `removeEventListener` in `disconnect()`. Each reconnect adds another listener. Old listeners fire on stale WebSockets, corrupting state.
+Add unit tests for `spawn.rs` and expand `fs_browser.rs` tests. These modules have business-critical path validation logic with 0 and 2 tests respectively.
 
-## Files
-- `pi-de/src/RemoteAgent.ts`
-- `pi-de/src/RemoteAgent.test.ts`
+**Files to modify:**
+- `hypivisor/src/spawn.rs` — add `#[cfg(test)] mod tests` (~80 lines)
+- `hypivisor/src/fs_browser.rs` — extend existing `mod tests` (~60 lines)
 
-## Changes
-1. Track the message handler reference: `private messageHandler: ((event: MessageEvent) => void) | null = null`
-2. In `connect()`: call `disconnect()` first to clean up any existing listener, then add the new one
-3. In `disconnect()`: remove the event listener from the old WS before nulling `this.ws`
-4. Add `onInitState` callback property so useAgent can get truncation info without a duplicate handler
+**spawn.rs tests (6-8 tests):**
+1. `spawn_agent` rejects path outside home directory → returns Err
+2. `spawn_agent` rejects non-existent path when no new_folder → returns Err("Path does not exist")
+3. `spawn_agent` creates new_folder subdirectory when specified
+4. `spawn_agent` with new_folder trims whitespace
+5. `spawn_agent` with empty new_folder and existing path proceeds (uses path directly)
+6. `spawn_agent` returns canonicalized path on success
+7. Path traversal with `..` is caught by canonicalize + starts_with check
 
-## Tests
-Add to `pi-de/src/RemoteAgent.test.ts`:
-- Test: disconnect removes event listener (old WS messages don't fire)
-- Test: connect→disconnect→connect cycle doesn't leak listeners
-- Test: onInitState callback fires on init_state
+**Note:** The actual `Command::new("pi").spawn()` call will fail in CI since `pi` may not be installed. Tests should focus on the validation logic up to the point of spawning. Use temp directories within $HOME for tests that need valid paths.
+
+**fs_browser.rs additional tests (4-5 tests):**
+1. Empty directory returns empty vec
+2. Directory with only hidden entries returns empty vec
+3. Files (not directories) are excluded
+4. Non-existent path returns error
+5. Deeply nested directory works correctly
+
+**Acceptance criteria:**
+- ~12 new Rust tests
+- Tests pass with `cd hypivisor && cargo test`
+- All path validation edge cases covered

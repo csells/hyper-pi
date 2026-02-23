@@ -33,9 +33,9 @@ export default function SpawnModal({ hvWs, onClose }: SpawnModalProps) {
     }
   }, [hvWs]);
 
-  useEffect(() => {
-    loadDirs(currentPath);
-  }, [loadDirs]);
+  // Load initial directory listing on mount (empty string = server default = $HOME)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { loadDirs(""); }, []);
 
   const handleNavigate = (dir: string) => {
     const newPath = currentPath.replace(/\/$/, "") + "/" + dir;

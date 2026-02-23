@@ -1,12 +1,12 @@
 {
   "id": "task-2",
-  "title": "Fix useAgent.ts connection leaks and error handling",
+  "title": "Pi-DE component unit test gaps (SpawnModal, initStorage, patchLit)",
   "status": "in_progress",
   "depends_on": [],
-  "created_at": "2026-02-23T14:11:50.553Z",
-  "updated_at": "2026-02-23T14:20:25.907Z",
-  "attempt_count": 7,
-  "started_at": "2026-02-23T14:20:25.887Z",
-  "base_commit": "ffc8fbb8d09c067ee00bdc8fc72a444fd346e9dd",
-  "assigned_to": "CalmOwl"
+  "created_at": "2026-02-23T14:52:04.374Z",
+  "updated_at": "2026-02-23T14:54:20.287Z",
+  "attempt_count": 2,
+  "started_at": "2026-02-23T14:54:20.271Z",
+  "base_commit": "40ee37d9371b82261831838033a31f1137cd7f0e",
+  "assigned_to": "WildKnight"
 }

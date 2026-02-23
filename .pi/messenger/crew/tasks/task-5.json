@@ -1,12 +1,11 @@
 {
   "id": "task-5",
-  "title": "Fix hypivisor broadcast thread hang and FD leaks",
-  "status": "in_progress",
-  "depends_on": [],
-  "created_at": "2026-02-23T14:12:21.590Z",
-  "updated_at": "2026-02-23T14:19:36.564Z",
-  "attempt_count": 4,
-  "started_at": "2026-02-23T14:19:36.545Z",
-  "base_commit": "39f2f358294cb996aa0dffbb5bc6e22db819bc38",
-  "assigned_to": "LoudLion"
+  "title": "Message round-trip integration tests (Web → Agent → Web)",
+  "status": "todo",
+  "depends_on": [
+    "task-4"
+  ],
+  "created_at": "2026-02-23T14:52:04.375Z",
+  "updated_at": "2026-02-23T14:52:04.377Z",
+  "attempt_count": 0
 }

@@ -1,20 +1,24 @@
-# Fix hypivisor proxy: validate handshake, use node.machine, URL-decode token
+# Cross-channel message visibility and TUI interaction tests
 
-## Problem
-1. Proxy hardcodes `127.0.0.1` instead of using `node.machine` — breaks multi-machine (R-CC-5/6/7)
-2. Proxy doesn't validate 101 handshake response — failed connections enter relay loop silently
-3. Token not URL-decoded in auth.rs — fails with special characters when client uses encodeURIComponent
+Test the cross-channel guarantee: messages sent from the web appear in TUI output, messages sent from TUI appear in web WebSocket events. Uses tmux sendkeys for TUI interaction.
 
-## Files
-- `hypivisor/src/main.rs` (proxy section)
-- `hypivisor/src/auth.rs`
+**Files to create/modify:**
+- `integration-tests/src/cross-channel.test.ts` (new — ~200 lines)
 
-## Changes
-1. Use `node.machine.clone()` instead of `"127.0.0.1".to_string()` in `handle_proxy_ws`
-2. After reading handshake response, verify it contains "101". If not, send error to dashboard and return.
-3. In `auth.rs`, URL-decode the extracted token before comparison using `percent_encoding::percent_decode_str` or manual decode
+**Tests (5-7 tests):**
+1. **Web → TUI visibility:** Send a message via proxy WebSocket, use `tmux capture-pane` to verify the message text appears in pi's TUI output
+2. **TUI → Web visibility:** Use `tmux send-keys` to type a message in pi's TUI, verify `message_start` event with role "user" and matching content arrives on connected proxy WebSocket client
+3. **TUI response → Web events:** Type a prompt in TUI via sendkeys, verify assistant response events (message_start, message_update, message_end) appear on WebSocket client
+4. **Concurrent clients:** Web client + TUI both active, send from web → verify TUI shows it; send from TUI → verify web client gets event
+5. **Follow-up from web while TUI-initiated turn is streaming:** TUI starts a prompt, web sends a follow-up during streaming → both messages eventually appear in conversation
 
-## Tests
-- Add unit test for URL-decoded token matching in auth.rs
-- Add integration test: proxy returns error for offline agent (not hang)
-- Verify existing proxy-relay tests pass
+**TUI interaction approach:**
+- `tmux send-keys -t {session} "message text" Enter` to type into pi
+- `tmux capture-pane -t {session} -p` to read TUI output
+- Poll `capture-pane` output with timeout for expected text
+- Use unique marker strings (e.g., `XTEST_abc123`) to avoid false matches
+
+**Acceptance criteria:**
+- Tests pass with `cd integration-tests && npm test -- --testPathPattern cross-channel`
+- TUI interaction is reliable (polling, not fixed delays)
+- All tmux sessions cleaned up

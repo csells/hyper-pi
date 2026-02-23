@@ -1,4 +1,4 @@
-use crate::state::{NodeInfo, Registry};
+use crate::state::{NodeInfo, NodeStatus, Registry};
 use crate::{fs_browser, spawn};
 use asupersync::Cx;
 use chrono::Utc;
@@ -25,11 +25,17 @@ pub struct RpcResponse {
 }
 
 /// Dispatch an RPC request to the appropriate handler.
-pub fn dispatch(cx: &Cx, req: RpcRequest, state: &Registry) -> RpcResponse {
+/// `registered_node_id` is the ID of the node making the request (None for dashboard/admin).
+pub fn dispatch(
+    cx: &Cx,
+    req: RpcRequest,
+    state: &Registry,
+    registered_node_id: Option<&str>,
+) -> RpcResponse {
     let id = req.id.clone();
     match req.method.as_str() {
         "register" => handle_register(cx, id, req.params, state),
-        "deregister" => handle_deregister(cx, id, req.params, state),
+        "deregister" => handle_deregister(cx, id, req.params, state, registered_node_id),
         "list_nodes" => handle_list_nodes(id, state),
         "list_directories" => handle_list_directories(id, req.params, state),
         "spawn_agent" => handle_spawn_agent(id, req.params, state),
@@ -65,7 +71,7 @@ fn handle_register(
             error: Some("Invalid node info".into()),
         };
     };
-    node.status = "active".to_string();
+    node.status = NodeStatus::Active;
     node.offline_since = None;
     node.last_seen = Some(Utc::now().timestamp());
     let evicted: Vec<String>;
@@ -113,6 +119,7 @@ fn handle_deregister(
     id: Option<String>,
     params: Option<Value>,
     state: &Registry,
+    registered_node_id: Option<&str>,
 ) -> RpcResponse {
     let node_id = params
         .as_ref()
@@ -125,6 +132,19 @@ fn handle_deregister(
             error: Some("Missing params.id".into()),
         };
     };
+
+    // Authorization check: caller must own the node or be an admin (no registered_node_id)
+    if let Some(caller_id) = registered_node_id {
+        if caller_id != node_id {
+            return RpcResponse {
+                id,
+                result: None,
+                error: Some("Unauthorized: cannot deregister another node".into()),
+            };
+        }
+    }
+    // If registered_node_id is None, caller is admin (e.g., dashboard) — allow deregister
+
     let removed = {
         let mut nodes = state
             .nodes
@@ -261,7 +281,7 @@ mod tests {
                 "port": 8080, "status": "active"
             })),
         };
-        let resp = dispatch(&cx, req, &reg);
+        let resp = dispatch(&cx, req, &reg, None);
         assert!(resp.error.is_none());
         assert!(reg.nodes.read().unwrap().contains_key("test-node"));
     }
@@ -277,14 +297,14 @@ mod tests {
                 "id": "n1", "machine": "h", "cwd": "/tmp", "port": 80, "status": "active"
             })),
         };
-        dispatch(&cx, req, &reg);
+        dispatch(&cx, req, &reg, None);
 
         let req = RpcRequest {
             id: Some("2".into()),
             method: "list_nodes".into(),
             params: None,
         };
-        let resp = dispatch(&cx, req, &reg);
+        let resp = dispatch(&cx, req, &reg, None);
         let nodes: Vec<NodeInfo> = serde_json::from_value(resp.result.unwrap()).unwrap();
         assert_eq!(nodes.len(), 1);
         assert_eq!(nodes[0].id, "n1");
@@ -303,7 +323,7 @@ mod tests {
                 "port": 8082, "status": "active"
             })),
         };
-        dispatch(&cx, req, &reg);
+        dispatch(&cx, req, &reg, None);
         assert_eq!(reg.nodes.read().unwrap()["session-uuid"].port, 8082);
 
         // Same session re-registers on port 8080 (after reload)
@@ -315,7 +335,7 @@ mod tests {
                 "port": 8080, "status": "active"
             })),
         };
-        dispatch(&cx, req, &reg);
+        dispatch(&cx, req, &reg, None);
         assert_eq!(reg.nodes.read().unwrap().len(), 1);
         assert_eq!(reg.nodes.read().unwrap()["session-uuid"].port, 8080);
     }
@@ -333,7 +353,7 @@ mod tests {
                 "port": 8082, "status": "active"
             })),
         };
-        dispatch(&cx, req, &reg);
+        dispatch(&cx, req, &reg, None);
         assert!(reg.nodes.read().unwrap().contains_key("host-old-session"));
 
         // Same machine, same port, new session ID → old entry evicted
@@ -345,7 +365,7 @@ mod tests {
                 "port": 8082, "status": "active"
             })),
         };
-        dispatch(&cx, req, &reg);
+        dispatch(&cx, req, &reg, None);
         assert!(!reg.nodes.read().unwrap().contains_key("host-old-session"));
         assert!(reg.nodes.read().unwrap().contains_key("host-new-session"));
     }
@@ -363,7 +383,7 @@ mod tests {
                 "port": 8081, "status": "active"
             })),
         };
-        dispatch(&cx, req, &reg);
+        dispatch(&cx, req, &reg, None);
 
         let req = RpcRequest {
             id: Some("2".into()),
@@ -373,7 +393,7 @@ mod tests {
                 "port": 8082, "status": "active"
             })),
         };
-        dispatch(&cx, req, &reg);
+        dispatch(&cx, req, &reg, None);
         assert_eq!(reg.nodes.read().unwrap().len(), 2);
     }
 
@@ -389,16 +409,16 @@ mod tests {
                 "id": "dereg-node", "machine": "h", "cwd": "/tmp", "port": 80, "status": "active"
             })),
         };
-        dispatch(&cx, req, &reg);
+        dispatch(&cx, req, &reg, None);
         assert_eq!(reg.nodes.read().unwrap().len(), 1);
 
-        // Deregister it
+        // Deregister it as admin (None registered_node_id)
         let req = RpcRequest {
             id: Some("2".into()),
             method: "deregister".into(),
             params: Some(serde_json::json!({ "id": "dereg-node" })),
         };
-        let resp = dispatch(&cx, req, &reg);
+        let resp = dispatch(&cx, req, &reg, None);
         assert!(resp.error.is_none());
         let result = resp.result.unwrap();
         assert_eq!(result["status"], "deregistered");
@@ -414,7 +434,7 @@ mod tests {
             method: "deregister".into(),
             params: Some(serde_json::json!({ "id": "ghost" })),
         };
-        let resp = dispatch(&cx, req, &reg);
+        let resp = dispatch(&cx, req, &reg, None);
         assert!(resp.error.is_none());
         let result = resp.result.unwrap();
         assert_eq!(result["status"], "not_found");
@@ -429,8 +449,94 @@ mod tests {
             method: "bogus".into(),
             params: None,
         };
-        let resp = dispatch(&cx, req, &reg);
+        let resp = dispatch(&cx, req, &reg, None);
         assert!(resp.error.is_some());
         assert!(resp.error.unwrap().contains("Method not found"));
+    }
+
+    #[test]
+    fn deregister_fails_when_caller_doesnt_own_node() {
+        let cx = crate::ephemeral_cx();
+        let reg = make_registry();
+        // Register node "n1"
+        let req = RpcRequest {
+            id: Some("1".into()),
+            method: "register".into(),
+            params: Some(serde_json::json!({
+                "id": "n1", "machine": "h", "cwd": "/tmp", "port": 80, "status": "active"
+            })),
+        };
+        dispatch(&cx, req, &reg, None);
+        assert_eq!(reg.nodes.read().unwrap().len(), 1);
+
+        // Try to deregister "n1" as "n2" (different node)
+        let req = RpcRequest {
+            id: Some("2".into()),
+            method: "deregister".into(),
+            params: Some(serde_json::json!({ "id": "n1" })),
+        };
+        let resp = dispatch(&cx, req, &reg, Some("n2"));
+        assert!(resp.error.is_some());
+        assert!(resp.error.unwrap().contains("Unauthorized"));
+        // Node should still be registered
+        assert_eq!(reg.nodes.read().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn deregister_succeeds_when_caller_owns_node() {
+        let cx = crate::ephemeral_cx();
+        let reg = make_registry();
+        // Register node "n1"
+        let req = RpcRequest {
+            id: Some("1".into()),
+            method: "register".into(),
+            params: Some(serde_json::json!({
+                "id": "n1", "machine": "h", "cwd": "/tmp", "port": 80, "status": "active"
+            })),
+        };
+        dispatch(&cx, req, &reg, None);
+        assert_eq!(reg.nodes.read().unwrap().len(), 1);
+
+        // Deregister "n1" as "n1" (same node)
+        let req = RpcRequest {
+            id: Some("2".into()),
+            method: "deregister".into(),
+            params: Some(serde_json::json!({ "id": "n1" })),
+        };
+        let resp = dispatch(&cx, req, &reg, Some("n1"));
+        assert!(resp.error.is_none());
+        let result = resp.result.unwrap();
+        assert_eq!(result["status"], "deregistered");
+        // Node should be removed
+        assert_eq!(reg.nodes.read().unwrap().len(), 0);
+    }
+
+    #[test]
+    fn deregister_succeeds_as_admin_when_no_registered_node_id() {
+        let cx = crate::ephemeral_cx();
+        let reg = make_registry();
+        // Register node "n1"
+        let req = RpcRequest {
+            id: Some("1".into()),
+            method: "register".into(),
+            params: Some(serde_json::json!({
+                "id": "n1", "machine": "h", "cwd": "/tmp", "port": 80, "status": "active"
+            })),
+        };
+        dispatch(&cx, req, &reg, None);
+        assert_eq!(reg.nodes.read().unwrap().len(), 1);
+
+        // Admin (no registered_node_id) deregisters "n1"
+        let req = RpcRequest {
+            id: Some("2".into()),
+            method: "deregister".into(),
+            params: Some(serde_json::json!({ "id": "n1" })),
+        };
+        let resp = dispatch(&cx, req, &reg, None);
+        assert!(resp.error.is_none());
+        let result = resp.result.unwrap();
+        assert_eq!(result["status"], "deregistered");
+        // Node should be removed
+        assert_eq!(reg.nodes.read().unwrap().len(), 0);
     }
 }

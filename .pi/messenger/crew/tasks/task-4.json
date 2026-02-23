@@ -1,12 +1,12 @@
 {
   "id": "task-4",
-  "title": "Fix rpc.ts pending requests leak and SpawnModal loop",
+  "title": "Live pi agent lifecycle integration tests",
   "status": "in_progress",
   "depends_on": [],
-  "created_at": "2026-02-23T14:12:09.067Z",
-  "updated_at": "2026-02-23T14:21:14.293Z",
-  "attempt_count": 3,
-  "started_at": "2026-02-23T14:21:14.266Z",
-  "base_commit": "ffc8fbb8d09c067ee00bdc8fc72a444fd346e9dd",
-  "assigned_to": "PureYak"
+  "created_at": "2026-02-23T14:52:04.375Z",
+  "updated_at": "2026-02-23T14:54:24.242Z",
+  "attempt_count": 1,
+  "started_at": "2026-02-23T14:54:24.217Z",
+  "base_commit": "40ee37d9371b82261831838033a31f1137cd7f0e",
+  "assigned_to": "MintEagle"
 }

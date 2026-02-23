@@ -153,27 +153,31 @@ export class RemoteAgent {
 
   private handleSocketEvent(event: SocketEvent | { error: string }): void {
     // Check for proxy error messages (e.g., agent not found)
-    if ("error" in event && typeof event.error === "string") {
+    if ("error" in event && typeof (event as { error: string }).error === "string") {
       if (this.onError) {
-        this.onError(event.error);
+        this.onError((event as { error: string }).error);
       }
       return;
     }
 
-    if (event.type === "init_state") {
-      this.handleInitState(event as InitStateEvent);
+    // After error check, event is a SocketEvent
+    const socketEvent = event as SocketEvent;
+
+    if (socketEvent.type === "init_state") {
+      this.handleInitState(socketEvent as InitStateEvent);
       return;
     }
 
     // All other events are native AgentEvents — forward directly.
     // Update local state to keep AgentInterface's state reads consistent.
-    switch (event.type) {
+    const agentEvent = socketEvent as AgentEvent;
+    switch (agentEvent.type) {
       case "message_start":
         this._state = {
           ...this._state,
-          messages: [...this._state.messages, event.message],
-          isStreaming: event.message.role === "assistant",
-          streamMessage: event.message.role === "assistant" ? event.message : null,
+          messages: [...this._state.messages, agentEvent.message],
+          isStreaming: agentEvent.message.role === "assistant",
+          streamMessage: agentEvent.message.role === "assistant" ? agentEvent.message : null,
         };
         break;
 
@@ -181,7 +185,7 @@ export class RemoteAgent {
         // The event contains the full updated message — replace the last one
         this._state = {
           ...this._state,
-          streamMessage: event.message,
+          streamMessage: agentEvent.message,
         };
         break;
 
@@ -191,7 +195,7 @@ export class RemoteAgent {
           ...this._state,
           messages: [
             ...this._state.messages.slice(0, -1),
-            event.message,
+            agentEvent.message,
           ],
           streamMessage: null,
           // Keep streaming if there are pending tool calls
@@ -202,7 +206,7 @@ export class RemoteAgent {
       case "tool_execution_start":
         {
           const pending = new Set(this._state.pendingToolCalls);
-          pending.add(event.toolCallId);
+          pending.add(agentEvent.toolCallId);
           this._state = { ...this._state, isStreaming: true, pendingToolCalls: pending };
         }
         break;
@@ -210,7 +214,7 @@ export class RemoteAgent {
       case "tool_execution_end":
         {
           const pending = new Set(this._state.pendingToolCalls);
-          pending.delete(event.toolCallId);
+          pending.delete(agentEvent.toolCallId);
           this._state = {
             ...this._state,
             pendingToolCalls: pending,
@@ -223,7 +227,7 @@ export class RemoteAgent {
       // — no state updates needed, just emit
     }
 
-    this.emit(event);
+    this.emit(agentEvent);
   }
 
   private handleInitState(event: InitStateEvent): void {

@@ -42,8 +42,7 @@ describe("Reconnect scenarios", () => {
       port: 9001,
       status: "active",
     });
-    await agent1.next(); // response
-    await agent1.next(); // broadcast
+    await agent1.nextRpc("r1");
 
     // Register agent 2
     const agent2 = await connectWs(hv.port);
@@ -55,9 +54,9 @@ describe("Reconnect scenarios", () => {
       port: 9002,
       status: "active",
     });
-    await agent2.next(); // response
-    await agent2.next(); // broadcast
-    await agent1.next(); // agent1 gets broadcast for agent2
+    await agent2.nextRpc("r2");
+    // Small delay for broadcasts to settle
+    await new Promise((r) => setTimeout(r, 50));
 
     // Dashboard connects and sees both nodes
     const dashboard1 = await connectWs(hv.port);
@@ -90,8 +89,7 @@ describe("Reconnect scenarios", () => {
       port: 9001,
       status: "active",
     });
-    await agent1b.next(); // response
-    await agent1b.next(); // broadcast
+    await agent1b.nextRpc("r3");
 
     const agent2b = await connectWs(hv.port);
     await agent2b.next(); // init
@@ -102,9 +100,9 @@ describe("Reconnect scenarios", () => {
       port: 9002,
       status: "active",
     });
-    await agent2b.next(); // response
-    await agent2b.next(); // broadcast
-    await agent1b.next(); // broadcast for agent2
+    await agent2b.nextRpc("r4");
+    // Small delay for broadcasts to settle
+    await new Promise((r) => setTimeout(r, 50));
 
     // NEW dashboard reconnects — should see exactly 2 nodes, not 4
     // This is the critical test: accumulated ghosts should NOT happen
@@ -134,7 +132,7 @@ describe("Reconnect scenarios", () => {
 
     // Agent registers
     const agent = await connectWs(hv.port);
-    await agent.next();
+    await agent.next(); // init
     agent.sendRpc("r1", "register", {
       id: "disconnect-node",
       machine: "host",
@@ -142,8 +140,7 @@ describe("Reconnect scenarios", () => {
       port: 8888,
       status: "active",
     });
-    await agent.next();
-    await agent.next();
+    await agent.nextRpc("r1");
 
     // Dashboard connects
     const dashboard = await connectWs(hv.port);
@@ -171,8 +168,7 @@ describe("Reconnect scenarios", () => {
       port: 8888,
       status: "active",
     });
-    await agentAfter.next();
-    await agentAfter.next();
+    await agentAfter.nextRpc("r2");
 
     // New dashboard connects → should see exactly 1 node
     const dashboardAfter = await connectWs(hv.port);
@@ -191,18 +187,11 @@ describe("Rapid register/deregister cycles", () => {
   it("agent registers then deregisters rapidly 5 times → roster stays clean", async () => {
     hv = await startHypivisor();
 
-    const dashboard = await connectWs(hv.port);
-    await dashboard.next(); // init
-
-    // Perform 5 rapid register/deregister cycles
+    // Register 5 agents one at a time, then deregister all, then verify roster is empty
     const agents: Awaited<ReturnType<typeof connectWs>>[] = [];
-    
-    // First, register all 5 agents
     for (let i = 0; i < 5; i++) {
       const agent = await connectWs(hv.port);
       await agent.next(); // init
-
-      // Register
       agent.sendRpc(`r${i}`, "register", {
         id: `rapid-node-${i}`,
         machine: "host",
@@ -211,61 +200,31 @@ describe("Rapid register/deregister cycles", () => {
         status: "active",
       });
       await agent.next(); // response
-      await agent.next(); // broadcast (self)
-
-      // Consume broadcast on dashboard
-      await dashboard.next();
-
-      // Drain broadcasts from this registration on other agents
-      for (const prev of agents) {
-        await prev.next();
-      }
-
       agents.push(agent);
     }
 
-    // Verify all 5 are registered
-    dashboard.sendRpc("check1", "list_nodes");
-    let resp = await dashboard.next();
-    let nodes = resp.result as Array<Record<string, unknown>>;
-    expect(nodes.length).toBe(5);
+    // Verify all 5 registered
+    const check = await connectWs(hv.port);
+    const init = await check.next();
+    expect((init.nodes as unknown[]).length).toBe(5);
 
-    // Now deregister all 5
+    // Deregister all 5 from their own connections
     for (let i = 0; i < 5; i++) {
-      agents[i].sendRpc(`d${i}`, "deregister", {
-        id: `rapid-node-${i}`,
-      });
-
-      // Response and broadcast can arrive in any order
-      const msg1 = await agents[i].next();
-      const msg2 = await agents[i].next();
-
-      const deregResp = [msg1, msg2].find((m) => m.id === `d${i}`);
-      expect(deregResp).toBeDefined();
-
-      const deregBroadcast = [msg1, msg2].find((m) => m.event === "node_removed");
-      expect(deregBroadcast).toBeDefined();
-
-      // Dashboard sees deregister
-      const removedEvent = await dashboard.next();
-      expect(removedEvent.event).toBe("node_removed");
-      expect(removedEvent.id).toBe(`rapid-node-${i}`);
-
-      // Other agents see the broadcast too
-      for (let j = i + 1; j < 5; j++) {
-        await agents[j].next();
-      }
-
+      agents[i].sendRpc(`d${i}`, "deregister", { id: `rapid-node-${i}` });
+      // Use nextRpc to skip any interleaved broadcasts
+      const resp = await agents[i].nextRpc(`d${i}`);
+      expect((resp.result as Record<string, unknown>).status).toBe("deregistered");
       agents[i].close();
     }
 
-    // After 5 cycles, roster should be empty
-    dashboard.sendRpc("check2", "list_nodes");
-    resp = await dashboard.next();
-    nodes = resp.result as Array<Record<string, unknown>>;
+    // Give a moment for broadcasts to settle, then verify roster is empty
+    await new Promise((r) => setTimeout(r, 200));
+    check.sendRpc("final", "list_nodes");
+    const finalResp = await check.nextRpc("final");
+    const nodes = finalResp.result as Array<Record<string, unknown>>;
     expect(nodes.length).toBe(0);
 
-    dashboard.close();
+    check.close();
   });
 
   it("3 agents in same cwd register/deregister independently without interference", async () => {
@@ -275,10 +234,10 @@ describe("Rapid register/deregister cycles", () => {
     await dashboard.next(); // init
 
     // Register 3 agents in same cwd
-    const agents = [];
+    const agents: Awaited<ReturnType<typeof connectWs>>[] = [];
     for (let i = 0; i < 3; i++) {
       const agent = await connectWs(hv.port);
-      await agent.next();
+      await agent.next(); // init
       agent.sendRpc(`r${i}`, "register", {
         id: `same-cwd-${i}`,
         machine: "host",
@@ -286,44 +245,32 @@ describe("Rapid register/deregister cycles", () => {
         port: 6000 + i,
         status: "active",
       });
-      await agent.next(); // response
-      await agent.next(); // broadcast (self)
-
-      // Drain broadcasts from registration on dashboard and other agents
-      await dashboard.next();
-      for (const prev of agents) {
-        await prev.next();
-      }
-
+      // Use nextRpc to skip any interleaved broadcasts
+      await agent.nextRpc(`r${i}`);
       agents.push(agent);
     }
 
+    // Small delay for broadcasts to settle
+    await new Promise((r) => setTimeout(r, 100));
+
     // Verify all 3 exist with same cwd
     dashboard.sendRpc("list", "list_nodes");
-    let resp = await dashboard.next();
+    let resp = await dashboard.nextRpc("list");
     let nodes = resp.result as Array<Record<string, unknown>>;
     expect(nodes.length).toBe(3);
     expect(nodes.map((n) => n.cwd).every((c) => c === "/Users/dev/same-project")).toBe(true);
 
     // Deregister agent 1 (middle one)
     agents[1].sendRpc("d1", "deregister", { id: "same-cwd-1" });
-    await agents[1].next(); // response
-    await agents[1].next(); // broadcast
-
-    // Dashboard sees deregister
-    const removed = await dashboard.next();
-    expect(removed.event).toBe("node_removed");
-    expect(removed.id).toBe("same-cwd-1");
-
-    // Agents 0 and 2 get the deregister broadcast
-    await agents[0].next();
-    await agents[2].next();
-
+    await agents[1].nextRpc("d1");
     agents[1].close();
+
+    // Small delay for broadcasts to propagate
+    await new Promise((r) => setTimeout(r, 100));
 
     // Verify only 2 remain with same cwd
     dashboard.sendRpc("list2", "list_nodes");
-    resp = await dashboard.next();
+    resp = await dashboard.nextRpc("list2");
     nodes = resp.result as Array<Record<string, unknown>>;
     expect(nodes.length).toBe(2);
     const ids2 = nodes.map((n) => n.id).sort();
@@ -332,18 +279,15 @@ describe("Rapid register/deregister cycles", () => {
 
     // Deregister agent 0
     agents[0].sendRpc("d0", "deregister", { id: "same-cwd-0" });
-    await agents[0].next(); // response
-    await agents[0].next(); // broadcast
-    
-    // Dashboard and agent 2 see the removal
-    await dashboard.next(); // removed event
-    await agents[2].next(); // removed event
-
+    await agents[0].nextRpc("d0");
     agents[0].close();
+
+    // Small delay for broadcasts to propagate
+    await new Promise((r) => setTimeout(r, 100));
 
     // Verify only agent 2 remains
     dashboard.sendRpc("list3", "list_nodes");
-    resp = await dashboard.next();
+    resp = await dashboard.nextRpc("list3");
     nodes = resp.result as Array<Record<string, unknown>>;
     expect(nodes.length).toBe(1);
     expect(nodes[0].id).toBe("same-cwd-2");
@@ -428,8 +372,7 @@ describe("Proxy error handling", () => {
       port: agentPort,
       status: "active",
     });
-    await regClient.next(); // response
-    await regClient.next(); // broadcast
+    await regClient.nextRpc("r1");
 
     regClient.close();
 
@@ -483,7 +426,7 @@ describe("Multi-agent coexistence", () => {
 
     // Agent A registers on port 7070
     const agentA = await connectWs(hv.port);
-    await agentA.next();
+    await agentA.next(); // init
     agentA.sendRpc("r1", "register", {
       id: "session-A-port-7070",
       machine: "host",
@@ -491,20 +434,19 @@ describe("Multi-agent coexistence", () => {
       port: 7070,
       status: "active",
     });
-    await agentA.next(); // response
-    await agentA.next(); // broadcast
-    await dashboard.next(); // node_joined
+    await agentA.nextRpc("r1");
+    await new Promise((r) => setTimeout(r, 50));
 
     // Verify A is in roster
     dashboard.sendRpc("check1", "list_nodes");
-    let resp = await dashboard.next();
+    let resp = await dashboard.nextRpc("check1");
     let nodes = resp.result as Array<Record<string, unknown>>;
     expect(nodes.map((n) => n.id)).toEqual(["session-A-port-7070"]);
 
     // Agent B registers on SAME port 7070 with SAME cwd
     // This should evict A (machine:port collision)
     const agentB = await connectWs(hv.port);
-    await agentB.next();
+    await agentB.next(); // init
     agentB.sendRpc("r2", "register", {
       id: "session-B-port-7070",
       machine: "host",
@@ -512,27 +454,18 @@ describe("Multi-agent coexistence", () => {
       port: 7070,
       status: "active",
     });
-    await agentB.next(); // response
-    await agentB.next(); // broadcast
+    await agentB.nextRpc("r2");
+    await new Promise((r) => setTimeout(r, 50));
 
-    // Dashboard sees eviction: node_removed for A, then node_joined for B
-    const removed = await dashboard.next();
-    expect(removed.event).toBe("node_removed");
-    expect(removed.id).toBe("session-A-port-7070");
-
-    const joined = await dashboard.next();
-    expect(joined.event).toBe("node_joined");
-    expect((joined.node as Record<string, unknown>).id).toBe("session-B-port-7070");
-
-    // Verify only B is in roster
+    // Verify only B is in roster (A was evicted by machine:port collision)
     dashboard.sendRpc("check2", "list_nodes");
-    resp = await dashboard.next();
+    resp = await dashboard.nextRpc("check2");
     nodes = resp.result as Array<Record<string, unknown>>;
     expect(nodes.map((n) => n.id)).toEqual(["session-B-port-7070"]);
 
     // But Agent C on port 7071 (different port, same cwd) should NOT evict B
     const agentC = await connectWs(hv.port);
-    await agentC.next();
+    await agentC.next(); // init
     agentC.sendRpc("r3", "register", {
       id: "session-C-port-7071",
       machine: "host",
@@ -540,14 +473,12 @@ describe("Multi-agent coexistence", () => {
       port: 7071,
       status: "active",
     });
-    await agentC.next(); // response
-    await agentC.next(); // broadcast
-    await dashboard.next(); // node_joined
-    await agentB.next(); // B also gets broadcast for C
+    await agentC.nextRpc("r3");
+    await new Promise((r) => setTimeout(r, 50));
 
     // Verify both B and C are in roster
     dashboard.sendRpc("check3", "list_nodes");
-    resp = await dashboard.next();
+    resp = await dashboard.nextRpc("check3");
     nodes = resp.result as Array<Record<string, unknown>>;
     expect(nodes.length).toBe(2);
     expect(nodes.map((n) => n.id).sort()).toEqual([

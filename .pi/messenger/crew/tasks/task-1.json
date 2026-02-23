@@ -1,12 +1,12 @@
 {
   "id": "task-1",
-  "title": "Fix ghost nodes in useHypivisor.ts",
+  "title": "Pi-socket index.ts unit tests",
   "status": "in_progress",
   "depends_on": [],
-  "created_at": "2026-02-23T14:11:39.830Z",
-  "updated_at": "2026-02-23T14:19:44.390Z",
-  "attempt_count": 4,
-  "started_at": "2026-02-23T14:19:44.367Z",
-  "base_commit": "39f2f358294cb996aa0dffbb5bc6e22db819bc38",
-  "assigned_to": "SwiftPhoenix"
+  "created_at": "2026-02-23T14:52:04.373Z",
+  "updated_at": "2026-02-23T14:52:04.411Z",
+  "attempt_count": 1,
+  "started_at": "2026-02-23T14:52:04.393Z",
+  "base_commit": "40ee37d9371b82261831838033a31f1137cd7f0e",
+  "assigned_to": "EpicLion"
 }

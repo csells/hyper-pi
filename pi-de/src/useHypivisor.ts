@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { handleRpcResponse } from "./rpc";
+import { handleRpcResponse, rejectAllPending } from "./rpc";
 import type { NodeInfo, HypivisorStatus, HypivisorEvent, RpcResponse } from "./types";
 
 interface UseHypivisorReturn {
@@ -89,6 +89,7 @@ export function useHypivisor(port: number, token: string): UseHypivisorReturn {
 
       ws.onclose = () => {
         setStatus("disconnected");
+        rejectAllPending("WebSocket disconnected");
         if (!disposed) {
           reconnectTimer = setTimeout(connect, 5000);
         }

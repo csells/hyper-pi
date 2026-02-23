@@ -87,7 +87,7 @@ export function useAgent(activeNode: NodeInfo | null): UseAgentReturn {
         }, 3000);
       };
 
-      ws.onerror = () => {};
+      ws.onerror = (e) => console.warn("[useAgent] WebSocket error:", e);
     }
 
     connect();

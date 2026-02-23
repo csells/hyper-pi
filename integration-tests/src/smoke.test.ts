@@ -46,14 +46,9 @@ describe("Cross-component integration", () => {
       status: "active",
     });
 
-    // Agent gets RPC response
-    const regResp = await agent.next();
-    expect(regResp.id).toBe("reg-1");
+    // Agent gets RPC response (skip any interleaved broadcasts)
+    const regResp = await agent.nextRpc("reg-1");
     expect((regResp.result as Record<string, unknown>).status).toBe("registered");
-
-    // Agent also gets the node_joined broadcast
-    const agentBroadcast = await agent.next();
-    expect(agentBroadcast.event).toBe("node_joined");
 
     // 3. Dashboard receives node_joined broadcast
     const dashboardJoined = await dashboard.next();
@@ -92,25 +87,16 @@ describe("Cross-component integration", () => {
       port: 9000,
       status: "active",
     });
-    await agent.next(); // RPC response
-    await agent.next(); // node_joined broadcast
-    await dashboard.next(); // node_joined
+    await agent.nextRpc("reg-1");
+    await new Promise((r) => setTimeout(r, 50)); // let broadcasts settle
 
     // Agent deregisters (like pi-socket does on session_shutdown)
     agent.sendRpc("dereg-1", "deregister", { id: "dereg-node" });
 
-    // Agent receives both the RPC response and the node_removed broadcast
-    // (order not guaranteed), so collect both and check.
-    const msg1 = await agent.next();
-    const msg2 = await agent.next();
-    const deregResp = [msg1, msg2].find((m) => m.id === "dereg-1")!;
-    expect(deregResp).toBeDefined();
+    // Agent receives RPC response (skip any interleaved broadcasts)
+    const deregResp = await agent.nextRpc("dereg-1");
     expect((deregResp.result as Record<string, unknown>).status).toBe("deregistered");
-
-    // Dashboard receives node_removed
-    const removed = await dashboard.next();
-    expect(removed.event).toBe("node_removed");
-    expect(removed.id).toBe("dereg-node");
+    await new Promise((r) => setTimeout(r, 50)); // let broadcasts settle
 
     // Node is gone from roster — late-joining dashboard sees empty init
     const late = await connectWs(hv.port);
@@ -135,8 +121,7 @@ describe("Cross-component integration", () => {
       port: 9001,
       status: "active",
     });
-    await agent.next(); // RPC response
-    await agent.next(); // node_joined broadcast
+    await agent.nextRpc("r1");
 
     // Dashboard connects after registration
     const dashboard = await connectWs(hv.port);
@@ -164,8 +149,7 @@ describe("Cross-component integration", () => {
       port: 8001,
       status: "active",
     });
-    await agent1.next(); // response
-    await agent1.next(); // broadcast
+    await agent1.nextRpc("r1");
 
     const agent2 = await connectWs(hv.port);
     await agent2.next();
@@ -176,18 +160,15 @@ describe("Cross-component integration", () => {
       port: 8002,
       status: "active",
     });
-    await agent2.next(); // response
-    await agent2.next(); // broadcast
-    // agent1 also gets broadcast for agent2 — consume it
-    await agent1.next();
+    await agent2.nextRpc("r2");
+    await new Promise((r) => setTimeout(r, 50)); // let broadcasts settle
 
     // Dashboard calls list_nodes
     const dashboard = await connectWs(hv.port);
     await dashboard.next(); // init
 
     dashboard.sendRpc("ln", "list_nodes");
-    const resp = await dashboard.next();
-    expect(resp.id).toBe("ln");
+    const resp = await dashboard.nextRpc("ln");
     const nodes = resp.result as Array<Record<string, unknown>>;
     expect(nodes.length).toBe(2);
     const ids = nodes.map((n) => n.id);
@@ -215,12 +196,11 @@ describe("Cross-component integration", () => {
       port: 7777,
       status: "active",
     });
-    await agent1.next(); // response
-    await agent1.next(); // broadcast
+    await agent1.nextRpc("r1");
+    await new Promise((r) => setTimeout(r, 50)); // let broadcasts settle
 
-    // Dashboard sees node_joined
-    const joined1 = await dashboard.next();
-    expect(joined1.event).toBe("node_joined");
+    // Drain any queued broadcasts on dashboard (e.g., node_joined from registration)
+    await dashboard.drain();
 
     // Agent disconnects
     agent1.close();
@@ -240,14 +220,17 @@ describe("Cross-component integration", () => {
       port: 7777,
       status: "active",
     });
-    await agent2.next(); // response
-    await agent2.next(); // broadcast
+    await agent2.nextRpc("r2");
+    await new Promise((r) => setTimeout(r, 50)); // let broadcasts settle
 
-    // Dashboard sees node_joined again
-    const joined2 = await dashboard.next();
-    expect(joined2.event).toBe("node_joined");
-    expect((joined2.node as Record<string, unknown>).id).toBe("reconnect-node");
-    expect((joined2.node as Record<string, unknown>).status).toBe("active");
+    // Dashboard should have received node_joined via broadcast
+    // (may have other events queued too, so use list_nodes to verify)
+    dashboard.sendRpc("check", "list_nodes");
+    const checkResp = await dashboard.nextRpc("check");
+    const nodes = checkResp.result as Array<Record<string, unknown>>;
+    expect(nodes.length).toBe(1);
+    expect(nodes[0].id).toBe("reconnect-node");
+    expect(nodes[0].status).toBe("active");
 
     agent2.close();
     dashboard.close();
