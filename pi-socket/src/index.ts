@@ -32,7 +32,7 @@ import * as log from "./log.js";
 import type { AgentEvent, RpcRequest } from "./types.js";
 
 export default function piSocket(pi: ExtensionAPI) {
-  const nodeId = `${os.hostname()}-${process.pid}`;
+  let nodeId = `${os.hostname()}-${process.pid}`; // fallback until session provides ID
   let wss: WebSocketServer | null = null;
   let hypivisorWs: WebSocket | null = null;
   let hypivisorUrlValid = true;
@@ -49,10 +49,24 @@ export default function piSocket(pi: ExtensionAPI) {
   log.info("pi-socket", "extension loaded", { nodeId, hypivisorUrl, startPort });
 
   // ── Startup ─────────────────────────────────────────────────
+  let wssPort: number | null = null; // remember our port across session restarts
+
   pi.on("session_start", async (_event, ctx) => {
-    const port = await portfinder.getPortPromise({ port: startPort });
+    // Use the stable session ID so hypivisor can deduplicate across restarts
+    const sessionId = ctx.sessionManager.getSessionId();
+    nodeId = `${os.hostname()}-${sessionId}`;
+
+    // Close previous WSS if session restarts — prevents stale port registrations
+    if (wss) {
+      wss.close();
+      wss = null;
+    }
+
+    // Reuse our previous port if still available, otherwise find a new one
+    const port = wssPort ?? (await portfinder.getPortPromise({ port: startPort }));
     wss = new WebSocketServer({ port });
-    log.info("pi-socket", "WebSocket server listening", { port });
+    wssPort = port;
+    log.info("pi-socket", "WebSocket server listening", { port, nodeId });
 
     wss.on("connection", boundary("wss.connection", (ws) => {
       clientCount++;

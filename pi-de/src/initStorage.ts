@@ -88,9 +88,11 @@ export function initPiDeStorage(): void {
   sessions.setBackend(backend);
   customProviders.setBackend(backend);
 
-  // Pre-populate a dummy API key so sendMessage's provider check passes.
-  // The remote pi agent uses its own real key — this just satisfies the guard.
-  backend.set("provider-keys", "anthropic", "remote-agent-key");
+  // Pre-populate dummy API keys for all providers so sendMessage's check passes.
+  // The remote pi agent uses its own real keys — these just satisfy the guard.
+  for (const provider of ["anthropic", "openai", "google", "mistral", "groq", "xai", "openrouter", "lmstudio", "bedrock"]) {
+    backend.set("provider-keys", provider, "remote-agent-key");
+  }
 
   setAppStorage(new AppStorage(settings, providerKeys, sessions, customProviders, backend));
 }

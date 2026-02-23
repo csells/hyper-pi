@@ -31,7 +31,8 @@ struct Args {
     #[arg(short, long, default_value_t = 31415)]
     port: u16,
 
-    #[arg(short = 't', long, default_value_t = 3600)]
+    /// Seconds before offline nodes are removed from the registry
+    #[arg(short = 't', long, default_value_t = 120)]
     node_ttl: u64,
 }
 
