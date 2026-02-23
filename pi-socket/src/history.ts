@@ -1,5 +1,4 @@
-import type { HistoryEvent, ToolInfo } from "./types.js";
-import type { AgentEvent } from "./types.js";
+import type { ToolInfo, InitStateEvent } from "./types.js";
 
 /** Maximum serialized size of init_state before truncation kicks in */
 const MAX_INIT_BYTES = 500 * 1024; // 500KB
@@ -7,98 +6,62 @@ const MAX_INIT_BYTES = 500 * 1024; // 500KB
 /**
  * Build the init_state payload from pi's native session branch.
  *
+ * Session entries from getBranch() are `{ type: "message", message: AgentMessage }`.
+ * We extract the AgentMessage objects directly — no lossy conversion to flat events.
+ *
  * This function is called from a wss.on("connection") handler which runs
  * on Node's event loop (outside pi's error-catching event system). It
  * MUST NOT throw, because an uncaught exception there would terminate
  * the pi process.
- *
- * Strategy: validate every property access defensively. If any entry is
- * malformed, skip it (not crash). If the entire input is bad, return an
- * empty valid payload.
  */
 export function buildInitState(
   entries: unknown[],
   tools: ToolInfo[],
-): AgentEvent & { type: "init_state" } {
+): InitStateEvent {
   // Guard: if pi gives us something non-iterable, return empty state.
   if (!Array.isArray(entries)) {
-    return { type: "init_state", events: [], tools: tools ?? [] };
+    return { type: "init_state", messages: [], tools: tools ?? [] };
   }
 
-  const allEvents: HistoryEvent[] = [];
+  const messages: unknown[] = [];
 
   for (const raw of entries) {
-    // Each entry is from pi's internal session format. We don't control
-    // the shape, so every access must be guarded.
     if (raw == null || typeof raw !== "object") continue;
     const entry = raw as Record<string, unknown>;
+
+    // Only extract message entries (skip compaction, branch_summary, etc.)
     if (entry.type !== "message") continue;
 
     const msg = entry.message;
     if (msg == null || typeof msg !== "object") continue;
+
+    // Validate it has a role (basic AgentMessage check)
     const m = msg as Record<string, unknown>;
+    if (typeof m.role !== "string") continue;
 
-    const role = m.role;
-    if (typeof role !== "string") continue;
-
-    const content = m.content;
-
-    if (role === "user") {
-      let text = "";
-      if (typeof content === "string") {
-        text = content;
-      } else if (Array.isArray(content)) {
-        text = content
-          .filter((c) => c != null && typeof c === "object" && (c as Record<string, unknown>).type === "text")
-          .map((c) => {
-            const t = (c as Record<string, unknown>).text;
-            return typeof t === "string" ? t : "";
-          })
-          .join("\n");
-      }
-      if (text) allEvents.push({ type: "user_message", text });
-    } else if (role === "assistant") {
-      if (Array.isArray(content)) {
-        for (const block of content) {
-          if (block == null || typeof block !== "object") continue;
-          const b = block as Record<string, unknown>;
-          if (b.type === "text" && typeof b.text === "string") {
-            allEvents.push({ type: "delta", text: b.text });
-          } else if (b.type === "thinking" && typeof b.thinking === "string") {
-            allEvents.push({ type: "thinking_delta", text: b.thinking });
-          } else if ((b.type === "toolCall" || b.type === "tool_use") && typeof b.name === "string") {
-            allEvents.push({ type: "tool_start", name: b.name, args: b.input ?? b.arguments });
-          }
-        }
-      }
-    } else if (role === "toolResult" && typeof m.toolName === "string") {
-      // Extract text content from tool result
-      let result: string | undefined;
-      if (Array.isArray(m.content)) {
-        const texts = (m.content as Array<{ type: string; text?: string }>)
-          .filter((b: { type: string; text?: string }) => b.type === "text" && b.text)
-          .map((b: { type: string; text?: string }) => b.text);
-        if (texts.length > 0) result = texts.join("\n");
-      }
-      allEvents.push({
-        type: "tool_end",
-        name: m.toolName,
-        isError: m.isError === true,
-        result,
-      });
-    }
+    messages.push(msg);
   }
 
-  // Truncation — drop oldest events until under budget
-  const serialized = JSON.stringify(allEvents);
+  // Truncation — drop oldest messages until under budget
+  const serialized = JSON.stringify(messages);
   if (serialized.length > MAX_INIT_BYTES) {
-    const totalEvents = allEvents.length;
-    while (allEvents.length > 10) {
-      allEvents.shift();
-      if (JSON.stringify(allEvents).length <= MAX_INIT_BYTES) break;
+    const totalMessages = messages.length;
+    while (messages.length > 10) {
+      messages.shift();
+      if (JSON.stringify(messages).length <= MAX_INIT_BYTES) break;
     }
-    return { type: "init_state", events: allEvents, tools: tools ?? [], truncated: true, totalEvents };
+    return {
+      type: "init_state",
+      messages: messages as InitStateEvent["messages"],
+      tools: tools ?? [],
+      truncated: true,
+      totalMessages,
+    };
   }
 
-  return { type: "init_state", events: allEvents, tools: tools ?? [] };
+  return {
+    type: "init_state",
+    messages: messages as InitStateEvent["messages"],
+    tools: tools ?? [],
+  };
 }

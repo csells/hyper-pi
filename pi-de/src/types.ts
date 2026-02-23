@@ -1,3 +1,5 @@
+import type { AgentEvent as CoreAgentEvent, AgentMessage } from "@mariozechner/pi-agent-core";
+
 /** A registered pi agent node in the hypivisor registry */
 export interface NodeInfo {
   id: string;
@@ -13,12 +15,6 @@ export interface Tool {
   description: string;
 }
 
-/** A rendered chat message in the Pi-DE UI */
-export interface ChatMessage {
-  role: "user" | "assistant" | "system";
-  content: string;
-}
-
 /** Hypivisor WebSocket connection status */
 export type HypivisorStatus = "connecting" | "connected" | "disconnected" | "error";
 
@@ -27,79 +23,23 @@ export type AgentStatus = "connecting" | "connected" | "disconnected" | "offline
 
 // ── WebSocket Message Types ───────────────────────────────────
 
-/** Events sent from pi-socket to clients */
-export type AgentEvent =
-  | InitStateEvent
-  | DeltaEvent
-  | ThinkingDeltaEvent
-  | ToolcallStartEvent
-  | ToolcallDeltaEvent
-  | ToolStartEvent
-  | ToolEndEvent
-  | MessageStartEvent
-  | MessageEndEvent;
-
+/**
+ * Sent once when a client connects, containing the full conversation
+ * history as proper AgentMessage objects.
+ */
 export interface InitStateEvent {
   type: "init_state";
-  events: HistoryEvent[];
+  messages: AgentMessage[];
   tools: Tool[];
   truncated?: boolean;
-  totalEvents?: number;
+  totalMessages?: number;
 }
 
-export interface DeltaEvent {
-  type: "delta";
-  text: string;
-}
-
-export interface ThinkingDeltaEvent {
-  type: "thinking_delta";
-  text: string;
-}
-
-export interface ToolcallStartEvent {
-  type: "toolcall_start";
-  name: string;
-  id: string;
-}
-
-export interface ToolcallDeltaEvent {
-  type: "toolcall_delta";
-  id: string;
-  argsDelta: string;
-}
-
-export interface ToolStartEvent {
-  type: "tool_start";
-  name: string;
-  args: unknown;
-}
-
-export interface ToolEndEvent {
-  type: "tool_end";
-  name: string;
-  isError: boolean;
-  result?: string;
-}
-
-export interface MessageStartEvent {
-  type: "message_start";
-  role: string;
-  content?: string;
-}
-
-export interface MessageEndEvent {
-  type: "message_end";
-  role: string;
-}
-
-/** Individual history events inside init_state.events */
-export type HistoryEvent =
-  | { type: "user_message"; text: string }
-  | DeltaEvent
-  | ThinkingDeltaEvent
-  | ToolStartEvent
-  | ToolEndEvent;
+/**
+ * Wire protocol from pi-socket: either init_state or a forwarded pi AgentEvent.
+ * pi-socket forwards events as-is — no custom decomposition.
+ */
+export type SocketEvent = InitStateEvent | CoreAgentEvent;
 
 // ── Hypivisor Push Events ─────────────────────────────────────
 

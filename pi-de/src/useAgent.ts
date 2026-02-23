@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { RemoteAgent } from "./RemoteAgent";
-import type { NodeInfo, AgentStatus, InitStateEvent } from "./types";
+import type { NodeInfo, AgentStatus } from "./types";
 
 interface UseAgentReturn {
   status: AgentStatus;
@@ -21,7 +21,7 @@ export function useAgent(activeNode: NodeInfo | null): UseAgentReturn {
   }, [activeNode]);
 
   const handleInitState = useCallback(
-    (payload: InitStateEvent) => {
+    (payload: { truncated?: boolean }) => {
       setHistoryTruncated(payload.truncated ?? false);
       // RemoteAgent handles init_state internally via handleSocketEvent
     },
@@ -67,7 +67,7 @@ export function useAgent(activeNode: NodeInfo | null): UseAgentReturn {
       ws.onmessage = (event) => {
         const data = JSON.parse(event.data);
         if (data.type === "init_state") {
-          handleInitState(data as InitStateEvent);
+          handleInitState(data as { truncated?: boolean });
         }
       };
 

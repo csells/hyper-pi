@@ -76,6 +76,52 @@ describe("Cross-component integration", () => {
     dashboard.close();
   });
 
+  it("agent deregisters cleanly → dashboard sees node_removed → node gone from roster", async () => {
+    hv = await startHypivisor();
+
+    const dashboard = await connectWs(hv.port);
+    await dashboard.next(); // init
+
+    // Agent registers
+    const agent = await connectWs(hv.port);
+    await agent.next(); // init
+    agent.sendRpc("reg-1", "register", {
+      id: "dereg-node",
+      machine: "localhost",
+      cwd: "/tmp/dereg-test",
+      port: 9000,
+      status: "active",
+    });
+    await agent.next(); // RPC response
+    await agent.next(); // node_joined broadcast
+    await dashboard.next(); // node_joined
+
+    // Agent deregisters (like pi-socket does on session_shutdown)
+    agent.sendRpc("dereg-1", "deregister", { id: "dereg-node" });
+
+    // Agent receives both the RPC response and the node_removed broadcast
+    // (order not guaranteed), so collect both and check.
+    const msg1 = await agent.next();
+    const msg2 = await agent.next();
+    const deregResp = [msg1, msg2].find((m) => m.id === "dereg-1")!;
+    expect(deregResp).toBeDefined();
+    expect((deregResp.result as Record<string, unknown>).status).toBe("deregistered");
+
+    // Dashboard receives node_removed
+    const removed = await dashboard.next();
+    expect(removed.event).toBe("node_removed");
+    expect(removed.id).toBe("dereg-node");
+
+    // Node is gone from roster — late-joining dashboard sees empty init
+    const late = await connectWs(hv.port);
+    const lateInit = await late.next();
+    expect((lateInit.nodes as unknown[]).length).toBe(0);
+
+    agent.close();
+    dashboard.close();
+    late.close();
+  });
+
   it("late-joining dashboard sees existing nodes in init", async () => {
     hv = await startHypivisor();
 

@@ -1,22 +1,14 @@
-/** Outbound event types sent from pi-socket to connected clients */
-export type AgentEvent =
-  | { type: "init_state"; events: HistoryEvent[]; tools: ToolInfo[]; truncated?: boolean; totalEvents?: number }
-  | { type: "delta"; text: string }
-  | { type: "thinking_delta"; text: string }
-  | { type: "toolcall_start"; name: string; id: string }
-  | { type: "toolcall_delta"; id: string; argsDelta: string }
-  | { type: "tool_start"; name: string; args: unknown }
-  | { type: "tool_end"; name: string; isError: boolean; result?: string }
-  | { type: "message_start"; role: string; content?: string }
-  | { type: "message_end"; role: string };
-
-/** Individual events inside init_state.events */
-export type HistoryEvent =
-  | { type: "user_message"; text: string }
-  | { type: "delta"; text: string }
-  | { type: "thinking_delta"; text: string }
-  | { type: "tool_start"; name: string; args: unknown }
-  | { type: "tool_end"; name: string; isError: boolean; result?: string };
+/**
+ * Wire protocol types for pi-socket.
+ *
+ * The core principle: pi-socket forwards pi's native AgentEvent objects
+ * directly over WebSocket. No decomposition, no custom event format.
+ * Pi-DE receives them and passes them straight to pi-web-ui's AgentInterface.
+ *
+ * The only custom event is `init_state`, which sends the current conversation
+ * (AgentMessage[]) and tool list when a client connects.
+ */
+import type { AgentMessage } from "@mariozechner/pi-agent-core";
 
 /** Tool metadata returned by pi.getAllTools() */
 export interface ToolInfo {
@@ -24,18 +16,40 @@ export interface ToolInfo {
   description: string;
 }
 
-/** JSON-RPC registration request sent to hypivisor */
-export interface RegisterParams {
-  id: string;
-  machine: string;
-  cwd: string;
-  port: number;
-  status: "active";
+/**
+ * Sent once when a client connects, containing the full conversation
+ * history as proper AgentMessage objects (no lossy conversion).
+ */
+export interface InitStateEvent {
+  type: "init_state";
+  messages: AgentMessage[];
+  tools: ToolInfo[];
+  truncated?: boolean;
+  totalMessages?: number;
 }
 
-/** JSON-RPC envelope */
+/**
+ * Wire protocol: either an init_state or a forwarded pi extension event.
+ *
+ * Extension events are forwarded as-is from pi's event system. They match
+ * the AgentEvent type from @mariozechner/pi-agent-core exactly:
+ *   - { type: "agent_start" }
+ *   - { type: "agent_end", messages: AgentMessage[] }
+ *   - { type: "turn_start", ... }
+ *   - { type: "turn_end", message: AgentMessage, toolResults: ... }
+ *   - { type: "message_start", message: AgentMessage }
+ *   - { type: "message_update", message: AgentMessage, assistantMessageEvent: ... }
+ *   - { type: "message_end", message: AgentMessage }
+ *   - { type: "tool_execution_start", toolCallId, toolName, args }
+ *   - { type: "tool_execution_update", toolCallId, toolName, args, partialResult }
+ *   - { type: "tool_execution_end", toolCallId, toolName, result, isError }
+ *
+ * We don't re-declare them here — pi-agent-core owns the types.
+ */
+
+/** JSON-RPC envelope sent to hypivisor */
 export interface RpcRequest {
   id: string;
   method: string;
-  params: RegisterParams;
+  params: Record<string, unknown>;
 }

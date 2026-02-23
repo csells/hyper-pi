@@ -4,6 +4,13 @@
  * Exposes each pi CLI instance via a local WebSocket server, broadcasts
  * agent events in real time, and registers with the hypivisor.
  *
+ * ## Event forwarding
+ *
+ * pi-socket forwards pi's native extension events directly over WebSocket.
+ * No decomposition, no custom event format. Pi-DE receives the same
+ * AgentEvent objects that pi-web-ui's AgentInterface expects, so
+ * RemoteAgent is just a thin pass-through.
+ *
  * ## Error architecture
  *
  * pi.on() handlers: pi catches errors via ExtensionRunner.emit().
@@ -11,11 +18,6 @@
  *
  * Node callbacks (wss.on, ws.on, setTimeout): wrapped with boundary()
  * which catches unanticipated errors and logs them with needsHardening.
- *
- * Inner layer: known errors handled at source (safeSerialize, readyState
- * guards, hypivisorUrlValid, defensive buildInitState).
- *
- * Outer layer: boundary() catches everything else → log → harden skill.
  *
  * ## Logging
  *
@@ -29,15 +31,14 @@ import os from "node:os";
 import { buildInitState } from "./history.js";
 import { boundary } from "./safety.js";
 import * as log from "./log.js";
-import type { AgentEvent, RpcRequest } from "./types.js";
+import type { RpcRequest } from "./types.js";
 
 export default function piSocket(pi: ExtensionAPI) {
-  let nodeId = `${os.hostname()}-${process.pid}`; // fallback until session provides ID
+  let nodeId = process.pid.toString(); // fallback until session provides UUID
   let wss: WebSocketServer | null = null;
   let hypivisorWs: WebSocket | null = null;
   let hypivisorUrlValid = true;
   let hypivisorConnected = false;
-  let clientCount = 0;
   let reconnectDelay = 0;
 
   const startPort = parseInt(process.env.PI_SOCKET_PORT || "8080", 10);
@@ -53,8 +54,7 @@ export default function piSocket(pi: ExtensionAPI) {
 
   pi.on("session_start", async (_event, ctx) => {
     // Use the stable session ID so hypivisor can deduplicate across restarts
-    const sessionId = ctx.sessionManager.getSessionId();
-    nodeId = `${os.hostname()}-${sessionId}`;
+    nodeId = ctx.sessionManager.getSessionId();
 
     // Close previous WSS if session restarts — prevents stale port registrations
     if (wss) {
@@ -69,8 +69,7 @@ export default function piSocket(pi: ExtensionAPI) {
     log.info("pi-socket", "WebSocket server listening", { port, nodeId });
 
     wss.on("connection", boundary("wss.connection", (ws) => {
-      clientCount++;
-      log.info("pi-socket", "client connected", { clientCount });
+      log.info("pi-socket", "client connected");
 
       const initPayload = buildInitState(
         ctx.sessionManager.getBranch(),
@@ -90,8 +89,7 @@ export default function piSocket(pi: ExtensionAPI) {
       }));
 
       ws.on("close", () => {
-        clientCount--;
-        log.info("pi-socket", "client disconnected", { clientCount });
+        log.info("pi-socket", "client disconnected");
       });
 
       ws.on("error", () => {});
@@ -101,75 +99,36 @@ export default function piSocket(pi: ExtensionAPI) {
     connectToHypivisor(port);
   });
 
-  // ── Event broadcasting ──────────────────────────────────────
-  // pi catches errors — no wrapping needed.
+  // ── Event forwarding ────────────────────────────────────────
+  // Forward pi's native events directly over WebSocket.
+  // pi catches errors from extension handlers — no wrapping needed.
 
-  pi.on("message_update", (event) => {
-    const ame = event.assistantMessageEvent;
-    if (ame?.type === "text_delta") {
-      broadcast({ type: "delta", text: ame.delta });
-    } else if (ame?.type === "thinking_delta") {
-      broadcast({ type: "thinking_delta", text: ame.delta });
-    } else if (ame?.type === "toolcall_start") {
-      const tc = ame.partial.content[ame.contentIndex] as { name?: string; id?: string };
-      if (tc?.name && tc?.id) {
-        broadcast({ type: "toolcall_start", name: tc.name, id: tc.id });
-      }
-    } else if (ame?.type === "toolcall_delta") {
-      const tc = ame.partial.content[ame.contentIndex] as { id?: string };
-      if (tc?.id) {
-        broadcast({ type: "toolcall_delta", id: tc.id, argsDelta: ame.delta });
-      }
-    }
-  });
+  pi.on("message_start", (event) => broadcast(event));
+  pi.on("message_update", (event) => broadcast(event));
+  pi.on("message_end", (event) => broadcast(event));
 
-  pi.on("tool_execution_start", (event) => {
-    broadcast({ type: "tool_start", name: event.toolName, args: event.args });
-  });
-
-  pi.on("tool_execution_end", (event) => {
-    // Extract text content from tool result for display in Pi-DE
-    let result: string | undefined;
-    if (event.result?.content) {
-      const texts = (event.result.content as Array<{ type: string; text?: string }>)
-        .filter((b) => b.type === "text" && b.text)
-        .map((b) => b.text);
-      if (texts.length > 0) result = texts.join("\n");
-    }
-    broadcast({ type: "tool_end", name: event.toolName, isError: event.isError, result });
-  });
-
-  pi.on("message_start", (event) => {
-    const msg = event.message;
-    if (msg.role === "user") {
-      // Include user message content so Pi-DE can display it
-      const content = typeof msg.content === "string"
-        ? msg.content
-        : Array.isArray(msg.content)
-          ? (msg.content as Array<{ type: string; text?: string }>)
-              .filter((b) => b.type === "text" && b.text)
-              .map((b) => b.text)
-              .join("\n")
-          : undefined;
-      broadcast({ type: "message_start", role: "user", content });
-    } else {
-      broadcast({ type: "message_start", role: msg.role });
-    }
-  });
-
-  pi.on("message_end", (event) => {
-    broadcast({ type: "message_end", role: event.message.role });
-  });
+  pi.on("tool_execution_start", (event) => broadcast(event));
+  pi.on("tool_execution_update", (event) => broadcast(event));
+  pi.on("tool_execution_end", (event) => broadcast(event));
 
   // ── Shutdown ────────────────────────────────────────────────
   pi.on("session_shutdown", async () => {
     log.info("pi-socket", "shutting down", { nodeId });
+    // Deregister from hypivisor before closing connections
+    if (hypivisorWs && hypivisorWs.readyState === WebSocket.OPEN) {
+      const rpc: RpcRequest = {
+        id: "dereg",
+        method: "deregister",
+        params: { id: nodeId },
+      };
+      hypivisorWs.send(JSON.stringify(rpc));
+    }
     if (wss) wss.close();
     if (hypivisorWs) hypivisorWs.close();
   });
 
   // ── Broadcast ───────────────────────────────────────────────
-  function broadcast(payload: AgentEvent): void {
+  function broadcast(payload: unknown): void {
     if (!wss) return;
     const msg = safeSerialize(payload);
     for (const client of wss.clients) {
@@ -220,21 +179,15 @@ export default function piSocket(pi: ExtensionAPI) {
       const wasConnected = hypivisorConnected;
       hypivisorConnected = false;
       if (wasConnected) {
-        // Lost an established connection — worth logging.
         log.warn("hypivisor", "disconnected, will reconnect");
       }
-      // First attempt or still retrying — silent. The initial
-      // "extension loaded" entry already shows the target URL.
       scheduleReconnect(port);
     });
 
-    ws.on("error", () => {
-      // close event follows — reconnect handled there.
-    });
+    ws.on("error", () => {});
   }
 
   function scheduleReconnect(port: number): void {
-    // Exponential backoff: 5s → 10s → 20s → ... → 5m cap
     reconnectDelay = reconnectDelay === 0
       ? reconnectMs
       : Math.min(reconnectDelay * 2, reconnectMaxMs);

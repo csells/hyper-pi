@@ -169,11 +169,13 @@ export function startHypivisor(
 export function connectWs(
   port: number,
   token?: string,
+  path: string = "/ws",
 ): Promise<BufferedWs> {
   return new Promise((resolve, reject) => {
+    const base = `ws://127.0.0.1:${port}${path}`;
     const url = token
-      ? `ws://127.0.0.1:${port}/ws?token=${encodeURIComponent(token)}`
-      : `ws://127.0.0.1:${port}/ws`;
+      ? `${base}${base.includes("?") ? "&" : "?"}token=${encodeURIComponent(token)}`
+      : base;
 
     const ws = new WebSocket(url);
 
