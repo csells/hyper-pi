@@ -1,8 +1,30 @@
-import { defineConfig } from "vite";
+import { defineConfig, Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 
+/**
+ * pi-web-ui's app.css bundles KaTeX CSS with relative font paths
+ * (`url(fonts/KaTeX_*.woff2)`) but doesn't ship the font files.
+ * They live in the katex package. This plugin rewrites font requests
+ * to serve from katex/dist/fonts/ instead of pi-web-ui/dist/fonts/.
+ */
+function katexFontsPlugin(): Plugin {
+  const from = "/node_modules/@mariozechner/pi-web-ui/dist/fonts/";
+  const to = "/node_modules/katex/dist/fonts/";
+  return {
+    name: "katex-fonts-redirect",
+    configureServer(server) {
+      server.middlewares.use((req, _res, next) => {
+        if (req.url?.startsWith(from)) {
+          req.url = req.url.replace(from, to);
+        }
+        next();
+      });
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), katexFontsPlugin()],
   server: {
     port: 5180,
     open: true,

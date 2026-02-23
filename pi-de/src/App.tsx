@@ -64,6 +64,28 @@ export default function App() {
     ai.enableModelSelector = false;
     ai.enableThinkingSelector = false;
     ai.enableAttachments = false;
+
+    // Override sendMessage to allow sending while agent is busy.
+    // pi-web-ui's default rejects sends during isStreaming, but pi-socket
+    // supports follow-up messages via deliverAs: "followUp".
+    (ai as unknown as { sendMessage: (text: string) => void }).sendMessage = (text: string) => {
+      if (!text.trim()) return;
+      agent.remoteAgent.prompt(text);
+    };
+
+    // Patch MessageEditor to allow typing/sending during streaming.
+    // Pi-DE is a viewer — the remote agent handles message queuing.
+    // Wait for AgentInterface to render so the shadow DOM has the editor.
+    requestAnimationFrame(() => {
+      const editor = ai.shadowRoot?.querySelector("message-editor") as HTMLElement | null;
+      if (editor) {
+        Object.defineProperty(editor, "isStreaming", {
+          get: () => false,
+          set: () => {},
+          configurable: true,
+        });
+      }
+    });
   }, [agent.remoteAgent, agent.status, activeNode]);
 
   const projectName = (cwd: string) =>

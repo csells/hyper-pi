@@ -66,8 +66,8 @@ export function buildInitState(
             allEvents.push({ type: "delta", text: b.text });
           } else if (b.type === "thinking" && typeof b.thinking === "string") {
             allEvents.push({ type: "thinking_delta", text: b.thinking });
-          } else if (b.type === "tool_use" && typeof b.name === "string") {
-            allEvents.push({ type: "tool_start", name: b.name, args: b.input });
+          } else if ((b.type === "toolCall" || b.type === "tool_use") && typeof b.name === "string") {
+            allEvents.push({ type: "tool_start", name: b.name, args: b.input ?? b.arguments });
           }
         }
       }
