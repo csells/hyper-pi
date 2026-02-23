@@ -11,6 +11,30 @@ Decentralized control plane for pi coding agents: a WebSocket extension (pi-sock
 | Pi-DE | React + Vite + TypeScript | `pi-de/` |
 | integration tests | TypeScript (vitest) | `integration-tests/` |
 
+## Connection Architecture
+
+```
+Pi-DE (browser)
+  │
+  ├─ ws://hypivisor:31415/ws              → registry (node roster, spawn)
+  │
+  └─ ws://hypivisor:31415/ws/agent/{nodeId} → proxy relay to agent
+       │
+       └─ hypivisor ←→ ws://agent:port    → pi-socket inside pi process
+```
+
+Pi-DE connects exclusively to the hypivisor. The `/ws/agent/{nodeId}` endpoint proxies bidirectionally to the agent's local pi-socket WebSocket. This avoids CORS issues, simplifies multi-machine routing, and means Pi-DE never needs to know agent ports or IPs.
+
+### Event flow
+
+pi-socket broadcasts real-time events to all clients:
+- `delta` / `thinking_delta` — streaming LLM output
+- `toolcall_start` / `toolcall_delta` — LLM tool call construction (during assistant message)
+- `tool_start` / `tool_end` — tool execution (after assistant message)
+- `message_start` (with `content` for user messages) / `message_end` — message boundaries
+
+Pi-DE's `RemoteAgent` translates these into pi-web-ui's `AgentEvent` interface, so `<agent-interface>` renders full conversations with markdown, code blocks, thinking sections, and tool cards — identical to pi's own web UI.
+
 ## Key Constraint
 
 pi itself is never modified. Everything is additive — a global extension, an external daemon, and an external web app.

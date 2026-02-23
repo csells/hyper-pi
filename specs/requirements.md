@@ -22,11 +22,15 @@ The default hypivisor port (31415) is a reference to π (3.1415…).
 - **R-PS-1:** On `pi` startup (`session_start` event), pi-socket MUST dynamically discover an available port (starting at 8080) and start a local WebSocket server.
 - **R-PS-2:** The extension MUST print the WebSocket URL (e.g., `ws://localhost:8080`) via `ctx.ui.notify()` on startup, enabling standalone use without a hypivisor.
 - **R-PS-3:** The extension MUST broadcast real-time agent events to all connected WebSocket clients by subscribing to pi's actual lifecycle events:
-  - `message_update` (with `event.assistantMessageEvent.type === "text_delta"`) — streaming LLM token output
-  - `tool_execution_start` — tool invocations (name + arguments)
-  - `tool_execution_end` — tool results (including `isError`)
-  - `message_start` / `message_end` — message boundaries
-- **R-PS-4:** The extension MUST accept incoming text messages from connected WebSocket clients and inject them into the active `pi` chat session via `pi.sendUserMessage()`. If the agent is currently streaming, the message MUST be delivered with `{ deliverAs: "followUp" }`.
+  - `message_update` with `text_delta` — streaming LLM text output
+  - `message_update` with `thinking_delta` — streaming thinking/reasoning output
+  - `message_update` with `toolcall_start` — LLM outputting a tool call (name + id from `partial.content[contentIndex]`)
+  - `message_update` with `toolcall_delta` — incremental tool call arguments JSON
+  - `tool_execution_start` — tool execution begins (name + arguments)
+  - `tool_execution_end` — tool execution completes (including `isError` and text result)
+  - `message_start` — message boundary; MUST include `content` for user messages so Pi-DE can display them
+  - `message_end` — message boundary
+- **R-PS-4:** The extension MUST accept incoming text messages from connected WebSocket clients and inject them into the active `pi` chat session via `pi.sendUserMessage()`. If the agent is currently streaming, the message MUST be delivered with `{ deliverAs: "followUp" }`. Users MUST be able to send messages at any time, including while the agent is busy.
 - **R-PS-5:** On new client connection, the extension MUST send the complete conversation history by reading pi's native session state via `ctx.sessionManager.getBranch()` (not a duplicate cache).
 - **R-PS-6:** On new client connection, the extension MUST send the list of tools/skills currently loaded in the `pi` instance via `pi.getAllTools()` (returns `{ name, description }[]`).
 - **R-PS-7:** The initial connection payload MUST be a single `init_state` message containing both `events` (history) and `tools` arrays.
@@ -161,14 +165,15 @@ The default hypivisor port (31415) is a reference to π (3.1415…).
 - **R-UI-20:** If the `spawn_agent` RPC returns an error, the modal MUST remain open and display the error message.
 
 ### 3.5 Chat Stage (Center Pane)
-- **R-UI-21:** When a node is selected, Pi-DE MUST open a direct WebSocket connection to that agent's pi-socket port.
+- **R-UI-21:** When a node is selected, Pi-DE MUST open a WebSocket connection to the agent through the hypivisor proxy at `ws://hypivisor/ws/agent/{nodeId}`.
 - **R-UI-22:** On connection, Pi-DE MUST receive and process the `init_state` payload to reconstruct the full conversation history.
 - **R-UI-23:** If the `init_state` payload includes `truncated: true`, the UI MUST display a notice at the top of the chat: "Showing recent history ({n} of {totalEvents} events)."
-- **R-UI-24:** Pi-DE MUST render the conversation using pi's official web UI components (`ChatPanel` from `@mariozechner/pi-web-ui`).
-- **R-UI-25:** User messages typed in the Chat Stage MUST be sent to the agent via WebSocket and optimistically rendered in the UI.
-- **R-UI-26:** Real-time `delta` events MUST be appended as streaming assistant content.
-- **R-UI-27:** Real-time `tool_start` events MUST be rendered as system messages showing the tool name.
-- **R-UI-28:** Real-time `tool_end` events MUST update the corresponding tool message with success/failure status.
+- **R-UI-24:** Pi-DE MUST render the conversation using pi's official web UI components (`AgentInterface` from `@mariozechner/pi-web-ui`). A `RemoteAgent` class MUST duck-type pi-agent-core's `Agent` interface, receiving socket events and emitting `AgentEvent`s that `AgentInterface` subscribes to.
+- **R-UI-25:** User messages typed in the Chat Stage MUST be sent to the agent via WebSocket and optimistically rendered in the UI. The message input MUST remain active while the agent is streaming, allowing follow-up messages at any time.
+- **R-UI-26:** Real-time `delta` and `thinking_delta` events MUST be appended as streaming assistant content (text and thinking blocks respectively).
+- **R-UI-27:** Real-time `toolcall_start` events MUST add `toolCall` content blocks to the streaming assistant message so pi-web-ui renders tool cards inline (with the appropriate renderer: `BashRenderer` for bash, `DefaultRenderer` for others). `toolcall_delta` events MUST update tool arguments incrementally.
+- **R-UI-28:** Real-time `tool_start` / `tool_end` events MUST pair with the toolCall blocks. `tool_end` MUST create `toolResult` messages so pi-web-ui's `resultByCallId` map pairs results with calls. Completed tools MUST show results; in-progress tools MUST show a spinner.
+- **R-UI-28a:** User messages typed in the pi TUI MUST appear in Pi-DE. pi-socket sends `message_start` with `role: "user"` and `content`, and `RemoteAgent` adds them to state.
 - **R-UI-29:** Switching agents MUST cleanly close the previous WebSocket connection and clear the chat state before connecting to the new agent.
 - **R-UI-30:** If the direct agent WebSocket connection fails or drops, the Chat Stage MUST display an inline "Connection lost — reconnecting…" message and retry every 5 seconds. If the agent's status in the roster is `"offline"`, the message MUST instead read "Agent offline — waiting for it to come back online."
 

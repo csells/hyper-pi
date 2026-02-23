@@ -49,15 +49,32 @@ All WebSocket connections in Hyper-Pi use JSON text frames. This section defines
 | Type | Payload | When |
 |------|---------|------|
 | `init_state` | `{ type, events[], tools[], truncated?, totalEvents? }` | On client connect |
-| `delta` | `{ type, text }` | LLM streaming token |
-| `tool_start` | `{ type, name, args }` | Tool execution begins |
-| `tool_end` | `{ type, name, isError }` | Tool execution completes |
-| `message_start` | `{ type, role }` | Message boundary (user, assistant, toolResult) |
+| `delta` | `{ type, text }` | LLM streaming text token |
+| `thinking_delta` | `{ type, text }` | LLM streaming thinking token |
+| `toolcall_start` | `{ type, name, id }` | LLM outputs a tool call in the assistant message |
+| `toolcall_delta` | `{ type, id, argsDelta }` | Incremental tool call arguments JSON |
+| `tool_start` | `{ type, name, args }` | Tool execution begins (after message_end) |
+| `tool_end` | `{ type, name, isError, result? }` | Tool execution completes |
+| `message_start` | `{ type, role, content? }` | Message boundary; includes `content` for user messages |
 | `message_end` | `{ type, role }` | Message boundary |
+
+**Event flow for a tool-using turn:**
+```
+message_start (assistant)
+  → delta (text tokens)
+  → toolcall_start (name, id)
+  → toolcall_delta (incremental args JSON)
+message_end (assistant) — message content includes toolCall blocks
+tool_start (execution begins)
+tool_end (execution completes with result)
+message_start (assistant) — next turn with tool results
+  → delta (text tokens)
+message_end (assistant) — final response, no tool calls
+```
 
 **Client → Server (plain text):**
 
-Clients send plain text strings (not JSON). Each string is injected as a user message via `pi.sendUserMessage()`.
+Clients send plain text strings (not JSON). Each string is injected as a user message via `pi.sendUserMessage()`. If the agent is currently streaming, the message is delivered with `{ deliverAs: "followUp" }` so it queues behind the current turn.
 
 ### pi-socket ↔ Hypivisor
 
@@ -771,6 +788,17 @@ The PSK (`HYPI_TOKEN`) provides identity verification, not encryption. It preven
 All interactive elements use `min-height: 44px; min-width: 44px` for touch targets.
 
 #### Connection Architecture
+
+Pi-DE connects to agents **through the hypivisor proxy**, not directly to pi-socket ports. This simplifies CORS, firewall, and multi-machine routing.
+
+```
+Pi-DE → ws://hypivisor:31415/ws              (registry: node roster)
+Pi-DE → ws://hypivisor:31415/ws/agent/{nodeId} (proxy: relayed to agent's pi-socket)
+```
+
+The proxy connection is transparent — pi-socket sees a normal WebSocket client, and Pi-DE receives all the same events as a direct connection.
+
+**Key component: `RemoteAgent`** — duck-types pi-agent-core's `Agent` interface so pi-web-ui's `<agent-interface>` component works unchanged. Receives socket events, maintains `AgentState` (messages, isStreaming, tools, pendingToolCalls), and emits `AgentEvent`s that drive the UI.
 
 Pi-DE maintains **two independent WebSocket connections** plus connection state:
 

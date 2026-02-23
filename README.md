@@ -16,16 +16,13 @@ Decentralized control plane for [pi](https://github.com/badlogic/pi-coding-agent
 
 ## Quick Start
 
-### 1. Build pi-socket
+### 1. Install pi-socket extension
 
 ```bash
 cd pi-socket
-npm install
-npm run build
-# Install globally for pi:
-cp -r dist ~/.pi/agent/extensions/pi-socket/
-cp package.json ~/.pi/agent/extensions/pi-socket/
-cd ~/.pi/agent/extensions/pi-socket && npm install --production
+npm install && npm run build
+# Symlink for global use (pi auto-loads extensions from here):
+ln -s $(pwd) ~/.pi/agent/extensions/pi-socket
 ```
 
 ### 2. Start hypivisor
@@ -34,6 +31,7 @@ cd ~/.pi/agent/extensions/pi-socket && npm install --production
 cd hypivisor
 cargo run
 # Listens on ws://0.0.0.0:31415/ws
+# Proxy: ws://0.0.0.0:31415/ws/agent/{nodeId}
 ```
 
 ### 3. Start Pi-DE
@@ -42,7 +40,7 @@ cargo run
 cd pi-de
 npm install
 npm run dev
-# Opens http://localhost:5173
+# Opens http://localhost:5180
 ```
 
 ### 4. Run pi (in any project directory)
@@ -51,7 +49,10 @@ npm run dev
 cd ~/my-project
 pi
 # pi-socket auto-loads, registers with hypivisor, appears in Pi-DE
+# Click the agent in Pi-DE to see its conversation in real time
 ```
+
+After `/reload` in the pi TUI, pi-socket picks up code changes without restarting.
 
 ## Authentication
 
@@ -64,6 +65,14 @@ export HYPI_TOKEN="your-secret"
 For Pi-DE, set `VITE_HYPI_TOKEN` in a `.env` file or environment.
 
 ## Architecture
+
+```
+Pi-DE (browser)
+  ├─ ws://hypivisor:31415/ws         → registry (roster, spawn)
+  └─ ws://hypivisor:31415/ws/agent/… → proxy → pi-socket → pi
+```
+
+Pi-DE connects only to the hypivisor. The hypivisor proxies agent WebSocket connections bidirectionally. pi-socket runs inside each pi process, broadcasting real-time events: streaming text, thinking, tool calls (with inline rendering via pi-web-ui's tool renderers), and user messages. Pi-DE's `RemoteAgent` adapter translates these into pi-web-ui's `AgentEvent` interface.
 
 See [specs/](specs/) for the full design:
 
