@@ -2,10 +2,20 @@
 
 ## End-to-End
 
-- [ ] abort/cancel: `RemoteAgent.abort()` is a no-op — the cancel button in the
-      stage header renders but does nothing. Needs a new `abort` WebSocket
-      message type in the protocol, a pi-socket handler that calls
-      `pi.abort()`, and `RemoteAgent.abort()` sending it over WebSocket.
+- [ ] abort/cancel + send-during-streaming: during a streaming response, the
+      MessageEditor button should conditionally show two states in the same
+      location:
+  - **empty input → square stop button**: cancels the agent's current work
+    (like the TUI stop button). Needs a new `abort` WebSocket message type in
+    the protocol, a pi-socket handler that calls `pi.abort()`, and
+    `RemoteAgent.abort()` sending it over WebSocket.
+  - **non-empty input → normal submit button**: sends the user's message as a
+    follow-up queued behind the current response (like the TUI does).
+    `patchSendDuringStreaming.ts` already enables this but currently suppresses
+    the stop button entirely by forcing `isStreaming=false` on MessageEditor.
+    The patch needs to be reworked so both states are possible.
+  - This is especially important for mobile where there's no keyboard shortcut
+    alternative — the button is the only way to cancel or send.
 - [ ] autocomplete for commands/skills when the user presses "/" — needs a new
       `list_commands` message type in the protocol so pi-socket can return
       available `/` commands and skills
@@ -43,7 +53,7 @@
 - [x] theming: 7 themes (dark, light, gruvbox-dark, tokyo-night, nord, solarized-dark, solarized-light) with full pi color token mapping to CSS custom properties
 - [~] need a cancel button AND a submit button during streaming responses
       (submit works; cancel button renders but `abort()` is a no-op — see
-      End-to-End section)
+      abort/cancel item in End-to-End section for the full design)
 - [x] show the name of the session as well as the project
   - [x] make it easy to name the session
 - [x] what are the greyed out agents for? why do I want to click on dead agents
