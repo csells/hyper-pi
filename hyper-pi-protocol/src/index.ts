@@ -98,6 +98,29 @@ export interface FilesListResponse {
 }
 
 /**
+ * Client request to attach a file to the next message.
+ * Sent as JSON over WebSocket; server decodes base64 content and includes
+ * in next pi.sendUserMessage() call as ImageContent or TextContent.
+ */
+export interface AttachFileRequest {
+  type: "attach_file";
+  filename: string;
+  content: string;      // base64-encoded file content
+  mimeType?: string;    // e.g. "image/png", "text/plain"
+}
+
+/**
+ * Server acknowledgement of file attachment.
+ * Sent back to client after processing attach_file request.
+ */
+export interface AttachFileResponse {
+  type: "attach_file_ack";
+  filename: string;
+  success: boolean;
+  error?: string;
+}
+
+/**
  * Server response to a fetch_history request.
  * Contains a slice of older messages ready to prepend to the conversation.
  */
@@ -112,7 +135,7 @@ export interface HistoryPageResponse {
  * Wire protocol from pi-socket: either init_state or a forwarded pi AgentEvent.
  * pi-socket forwards events as-is — no custom decomposition.
  */
-export type SocketEvent = InitStateEvent | AgentEvent | HistoryPageResponse | CommandsListResponse | FilesListResponse;
+export type SocketEvent = InitStateEvent | AgentEvent | HistoryPageResponse | CommandsListResponse | FilesListResponse | AttachFileResponse;
 
 // ── Hypivisor Registry Protocol ───────────────────────────────
 

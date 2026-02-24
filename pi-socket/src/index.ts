@@ -31,7 +31,7 @@ import os from "node:os";
 import { buildInitState, getHistoryPage } from "./history.js";
 import { boundary } from "./safety.js";
 import * as log from "./log.js";
-import type { RpcRequest, FetchHistoryRequest, AbortRequest } from "./types.js";
+import type { RpcRequest, FetchHistoryRequest, AbortRequest, AttachFileRequest, AttachFileResponse } from "./types.js";
 
 export default function piSocket(pi: ExtensionAPI) {
   let nodeId = process.pid.toString(); // fallback until session provides UUID
@@ -122,6 +122,93 @@ export default function piSocket(pi: ExtensionAPI) {
         if (parsed && typeof parsed === "object" && (parsed as any).type === "abort") {
           log.info("pi-socket", "abort requested by client");
           ctx.abort();
+          return;
+        }
+
+        // Handle file attachment requests
+        if (parsed && typeof parsed === "object" && (parsed as any).type === "attach_file") {
+          const req = parsed as AttachFileRequest;
+          const ack: AttachFileResponse = {
+            type: "attach_file_ack",
+            filename: req.filename,
+            success: false,
+          };
+
+          // Validate filename
+          if (!req.filename || typeof req.filename !== "string") {
+            ack.error = "filename is required";
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(safeSerialize(ack));
+            }
+            return;
+          }
+
+          // Validate content
+          if (!req.content || typeof req.content !== "string") {
+            ack.error = "content is required";
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(safeSerialize(ack));
+            }
+            return;
+          }
+
+          // Check file size: reject files > 10MB
+          const estimatedBytes = Buffer.byteLength(req.content, "utf-8");
+          const maxBytes = 10 * 1024 * 1024; // 10MB
+          if (estimatedBytes > maxBytes) {
+            ack.error = `file too large (${Math.round(estimatedBytes / 1024 / 1024)}MB > 10MB)`;
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(safeSerialize(ack));
+            }
+            return;
+          }
+
+          try {
+            // Decode base64 content
+            const decodedBytes = Buffer.from(req.content, "base64");
+            const isImage = req.mimeType && req.mimeType.startsWith("image/");
+
+            // Build content array for sendUserMessage
+            const content: any[] = [];
+
+            if (isImage && req.mimeType) {
+              // Image: add as ImageContent with base64 data
+              content.push({
+                type: "image",
+                data: req.content,
+                mimeType: req.mimeType,
+              } as any);
+            } else {
+              // Text: add as TextContent with filename prefix for context
+              const text = decodedBytes.toString("utf-8");
+              content.push({
+                type: "text",
+                text: `[File: ${req.filename}]\n${text}`,
+              } as any);
+            }
+
+            // Send via sendUserMessage with deliverAs appropriate based on agent idle state
+            try {
+              if (ctx.isIdle()) {
+                pi.sendUserMessage(content);
+              } else {
+                pi.sendUserMessage(content, { deliverAs: "followUp" });
+              }
+              ack.success = true;
+              log.info("pi-socket", "file attached", { filename: req.filename, bytes: estimatedBytes });
+            } catch (err) {
+              ack.error = `failed to attach file: ${String(err)}`;
+              log.error("attach_file.sendUserMessage", err);
+            }
+          } catch (err) {
+            ack.error = `failed to decode file: ${String(err)}`;
+            log.error("attach_file.decode", err);
+          }
+
+          // Send ack back to client
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(safeSerialize(ack));
+          }
           return;
         }
 

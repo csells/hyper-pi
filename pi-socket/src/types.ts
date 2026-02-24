@@ -15,6 +15,8 @@ export type {
   ListFilesRequest,
   FileInfo,
   FilesListResponse,
+  AttachFileRequest,
+  AttachFileResponse,
   HistoryPageResponse,
   SocketEvent,
   RpcRequest,

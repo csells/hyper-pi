@@ -395,6 +395,218 @@ describe("pi-socket/index.ts", () => {
     });
   });
 
+  describe("file attachment (attach_file)", () => {
+    it("attaches text file and sends content to pi", async () => {
+      mockCtx.isIdle.mockReturnValue(true);
+      piSocket(mockPi as ExtensionAPI);
+
+      const sessionStartHandlers = piEventHandlers["session_start"];
+      await sessionStartHandlers[0]({}, mockCtx);
+
+      const mockClient = { readyState: 1, send: vi.fn(), on: vi.fn() };
+      mockWssInstance.connectionHandler(mockClient);
+
+      let messageHandler: any = null;
+      for (const call of mockClient.on.mock.calls) {
+        if (call[0] === "message") {
+          messageHandler = call[1];
+          break;
+        }
+      }
+
+      // Create base64-encoded text file
+      const fileContent = "Hello, world!";
+      const base64Content = Buffer.from(fileContent).toString("base64");
+
+      const attachRequest = JSON.stringify({
+        type: "attach_file",
+        filename: "test.txt",
+        content: base64Content,
+        mimeType: "text/plain",
+      });
+
+      mockClient.send.mockClear();
+      messageHandler(Buffer.from(attachRequest));
+
+      // Verify sendUserMessage was called with the file content
+      expect(mockPi.sendUserMessage).toHaveBeenCalled();
+      const args = (mockPi.sendUserMessage as any).mock.calls[0];
+      expect(args[0]).toBeInstanceOf(Array); // content array
+      const content = args[0] as any[];
+      expect(content[0].type).toBe("text");
+      expect(content[0].text).toContain("test.txt");
+      expect(content[0].text).toContain(fileContent);
+
+      // Verify ack was sent with success=true
+      const ackData = mockClient.send.mock.calls[0][0];
+      const ack = JSON.parse(ackData);
+      expect(ack.type).toBe("attach_file_ack");
+      expect(ack.filename).toBe("test.txt");
+      expect(ack.success).toBe(true);
+    });
+
+    it("attaches image file with base64 data", async () => {
+      mockCtx.isIdle.mockReturnValue(true);
+      piSocket(mockPi as ExtensionAPI);
+
+      const sessionStartHandlers = piEventHandlers["session_start"];
+      await sessionStartHandlers[0]({}, mockCtx);
+
+      const mockClient = { readyState: 1, send: vi.fn(), on: vi.fn() };
+      mockWssInstance.connectionHandler(mockClient);
+
+      let messageHandler: any = null;
+      for (const call of mockClient.on.mock.calls) {
+        if (call[0] === "message") {
+          messageHandler = call[1];
+          break;
+        }
+      }
+
+      // Simulate base64 image data
+      const base64Image = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+
+      const attachRequest = JSON.stringify({
+        type: "attach_file",
+        filename: "test.png",
+        content: base64Image,
+        mimeType: "image/png",
+      });
+
+      mockClient.send.mockClear();
+      messageHandler(Buffer.from(attachRequest));
+
+      // Verify sendUserMessage was called with ImageContent
+      expect(mockPi.sendUserMessage).toHaveBeenCalled();
+      const args = (mockPi.sendUserMessage as any).mock.calls[0];
+      expect(args[0]).toBeInstanceOf(Array);
+      const content = args[0] as any[];
+      expect(content[0].type).toBe("image");
+      expect(content[0].mimeType).toBe("image/png");
+      expect(content[0].data).toBe(base64Image);
+
+      // Verify ack was sent with success=true
+      const ackData = mockClient.send.mock.calls[0][0];
+      const ack = JSON.parse(ackData);
+      expect(ack.type).toBe("attach_file_ack");
+      expect(ack.success).toBe(true);
+    });
+
+    it("rejects files larger than 10MB", async () => {
+      mockCtx.isIdle.mockReturnValue(true);
+      piSocket(mockPi as ExtensionAPI);
+
+      const sessionStartHandlers = piEventHandlers["session_start"];
+      await sessionStartHandlers[0]({}, mockCtx);
+
+      const mockClient = { readyState: 1, send: vi.fn(), on: vi.fn() };
+      mockWssInstance.connectionHandler(mockClient);
+
+      let messageHandler: any = null;
+      for (const call of mockClient.on.mock.calls) {
+        if (call[0] === "message") {
+          messageHandler = call[1];
+          break;
+        }
+      }
+
+      // Create base64 content > 10MB
+      const largeContent = "x".repeat(11 * 1024 * 1024);
+      const base64Large = Buffer.from(largeContent).toString("base64");
+
+      const attachRequest = JSON.stringify({
+        type: "attach_file",
+        filename: "huge.txt",
+        content: base64Large,
+      });
+
+      mockClient.send.mockClear();
+      messageHandler(Buffer.from(attachRequest));
+
+      // Verify sendUserMessage was NOT called
+      expect(mockPi.sendUserMessage).not.toHaveBeenCalled();
+
+      // Verify ack was sent with error
+      const ackData = mockClient.send.mock.calls[0][0];
+      const ack = JSON.parse(ackData);
+      expect(ack.type).toBe("attach_file_ack");
+      expect(ack.success).toBe(false);
+      expect(ack.error).toContain("file too large");
+    });
+
+    it("sends ack back to client", async () => {
+      mockCtx.isIdle.mockReturnValue(true);
+      piSocket(mockPi as ExtensionAPI);
+
+      const sessionStartHandlers = piEventHandlers["session_start"];
+      await sessionStartHandlers[0]({}, mockCtx);
+
+      const mockClient = { readyState: 1, send: vi.fn(), on: vi.fn() };
+      mockWssInstance.connectionHandler(mockClient);
+
+      let messageHandler: any = null;
+      for (const call of mockClient.on.mock.calls) {
+        if (call[0] === "message") {
+          messageHandler = call[1];
+          break;
+        }
+      }
+
+      const fileContent = "test";
+      const base64Content = Buffer.from(fileContent).toString("base64");
+
+      const attachRequest = JSON.stringify({
+        type: "attach_file",
+        filename: "test.txt",
+        content: base64Content,
+      });
+
+      mockClient.send.mockClear();
+      messageHandler(Buffer.from(attachRequest));
+
+      // Verify send() was called for the ack
+      expect(mockClient.send).toHaveBeenCalled();
+      const ackData = mockClient.send.mock.calls[0][0];
+      const ack = JSON.parse(ackData);
+      expect(ack.type).toBe("attach_file_ack");
+      expect(ack.filename).toBe("test.txt");
+    });
+
+    it("returns early if ws is not OPEN", async () => {
+      mockCtx.isIdle.mockReturnValue(true);
+      piSocket(mockPi as ExtensionAPI);
+
+      const sessionStartHandlers = piEventHandlers["session_start"];
+      await sessionStartHandlers[0]({}, mockCtx);
+
+      const mockClient = { readyState: 0, send: vi.fn(), on: vi.fn() }; // NOT OPEN
+      mockWssInstance.connectionHandler(mockClient);
+
+      let messageHandler: any = null;
+      for (const call of mockClient.on.mock.calls) {
+        if (call[0] === "message") {
+          messageHandler = call[1];
+          break;
+        }
+      }
+
+      const fileContent = "test";
+      const base64Content = Buffer.from(fileContent).toString("base64");
+
+      const attachRequest = JSON.stringify({
+        type: "attach_file",
+        filename: "test.txt",
+        content: base64Content,
+      });
+
+      mockClient.send.mockClear();
+      messageHandler(Buffer.from(attachRequest));
+
+      // Ack should not be sent because ws is not OPEN
+      expect(mockClient.send).not.toHaveBeenCalled();
+    });
+  });
+
   describe("init_state on client connect", () => {
     it("sends init_state to new client", async () => {
       mockCtx.sessionManager.getBranch.mockReturnValue([]);
