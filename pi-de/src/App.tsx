@@ -4,6 +4,7 @@ import { useAgent } from "./useAgent";
 import { useTheme } from "./useTheme";
 import SpawnModal from "./SpawnModal";
 import { patchMobileKeyboard } from "./patchMobileKeyboard";
+import { patchSendDuringStreaming } from "./patchSendDuringStreaming";
 import type { NodeInfo } from "./types";
 
 // Import pi-web-ui components (registers <agent-interface> custom element)
@@ -120,16 +121,20 @@ export default function App() {
     ai.enableAttachments = false;
 
     // Patch mobile keyboard behavior: Enter = newline, Shift+Enter = send
-    const cleanup = patchMobileKeyboard(el);
+    const cleanupMobileKeyboard = patchMobileKeyboard(el);
+    
+    // Patch send-during-streaming: allow sending while agent streams
+    const cleanupSendDuringStreaming = patchSendDuringStreaming(el);
+    
     return () => {
-      cleanup();
+      cleanupMobileKeyboard();
+      cleanupSendDuringStreaming();
     };
 
-    // No overrides needed. The original AgentInterface.sendMessage:
-    // 1. Checks isStreaming — allows sends when agent is idle
-    // 2. Checks API key — dummy keys pre-populated in initPiDeStorage
-    // 3. Clears the editor
-    // 4. Calls this.session.prompt(text) → RemoteAgent.prompt → ws.send
+    // Patches enable:
+    // 1. Mobile keyboard: Enter = newline on touch, Shift+Enter = send
+    // 2. Send during streaming: AgentInterface.sendMessage removes isStreaming gate,
+    //    MessageEditor.isStreaming always false (render send button, allow Enter to send)
   }, [agent.remoteAgent, agent.status, activeNode]);
 
   // Scroll to bottom when agent is selected or new messages arrive

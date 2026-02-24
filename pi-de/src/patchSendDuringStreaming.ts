@@ -1,236 +1,130 @@
 /**
- * Patch for sending messages during streaming and showing send button during streaming.
+ * Patch for send-during-streaming: allows users to send messages while
+ * the agent is streaming (isStreaming = true).
  *
- * This patch addresses two gates that prevent user interaction during streaming:
- * 1. AgentInterface.sendMessage() blocks on isStreaming
- * 2. MessageEditor.isStreaming property controls button display and Enter key handling
+ * Two overrides:
+ * 1. AgentInterface.sendMessage() — remove the isStreaming gate so prompt()
+ *    is called even during streaming. pi-socket handles follow-ups via
+ *    `pi.sendUserMessage(text, { deliverAs: "followUp" })`.
+ * 2. MessageEditor.isStreaming property — always return false so the editor
+ *    renders the send button (not stop button) and Enter-to-send works.
  *
- * Solution:
- * - Override sendMessage to remove the isStreaming gate (but keep empty message block)
- * - Override MessageEditor.isStreaming to always return false
- *
- * Composition with patchMobileKeyboard:
- * - patchMobileKeyboard intercepts Enter on mobile at capturing phase
- * - MessageEditor with isStreaming=false will allow Enter-to-send on desktop
- * - Mobile still gets newline (patchMobileKeyboard fires first with stopImmediatePropagation)
+ * Uses MutationObserver to find elements in light DOM, same pattern as
+ * patchMobileKeyboard.ts. Returns a cleanup function.
  */
 
 /**
- * Patches AgentInterface.sendMessage() to remove the isStreaming gate,
- * and MessageEditor.isStreaming to always return false.
+ * Patches the <agent-interface> element subtree to allow sending messages
+ * while the agent is streaming. Call with the agent-interface element or
+ * a parent container.
  *
- * Uses MutationObserver to find elements in light DOM (same pattern as patchMobileKeyboard.ts).
- * Returns a cleanup function.
+ * Returns a cleanup function that restores original behavior.
  */
 export function patchSendDuringStreaming(el: HTMLElement): () => void {
-  let agentInterface: HTMLElement & {
-    sendMessage?: (input: string, attachments?: any[]) => Promise<void>;
-  } | null = null;
-  let messageEditor: HTMLElement & {
-    isStreaming?: boolean | null;
-  } | null = null;
+  let observer: MutationObserver | null = null;
+  let patchedAgentInterface: HTMLElement | null = null;
+  let patchedMessageEditor: HTMLElement | null = null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let originalSendMessage: ((...args: any[]) => any) | null = null;
+  let originalIsStreamingDescriptor: PropertyDescriptor | undefined;
 
-  let agentInterfaceObserver: MutationObserver | null = null;
-  let messageEditorObserver: MutationObserver | null = null;
+  const patchElements = () => {
+    // Find agent-interface (el itself or a descendant)
+    const ai = el.tagName === "AGENT-INTERFACE"
+      ? el
+      : el.querySelector("agent-interface");
+    if (!ai || patchedAgentInterface) return;
 
-  let originalSendMessage: ((input: string, attachments?: any[]) => Promise<void>) | null = null;
-  let isStreamingDescriptor: PropertyDescriptor | null = null;
+    // Find message-editor inside agent-interface
+    const me = ai.querySelector("message-editor");
 
-  /**
-   * Patch AgentInterface.sendMessage to remove the isStreaming gate.
-   * Keeps the empty message block and other validation.
-   */
-  const patchAgentInterface = () => {
-    if (!agentInterface || !agentInterface.sendMessage) {
-      return;
-    }
-
-    // Store original if not already stored
-    if (!originalSendMessage) {
-      originalSendMessage = agentInterface.sendMessage.bind(agentInterface);
-
-      // Define patched version
-      const patchedSendMessage = async function (
-        this: any,
-        input: string,
-        attachments?: any[]
-      ) {
-        // Keep empty message block, but remove isStreaming gate
-        if (!input.trim() && attachments?.length === 0) return;
-
-        const session = this.session;
-        if (!session) throw new Error("No session set on AgentInterface");
-        if (!session.state.model) throw new Error("No model set on AgentInterface");
-
-        // Check if API key exists for the provider
-        const provider = session.state.model.provider;
-        const apiKey = await (window as any).getAppStorage?.().providerKeys.get?.(provider);
-
-        // If no API key, prompt for it
-        if (!apiKey) {
-          if (!this.onApiKeyRequired) {
-            console.error("No API key configured and no onApiKeyRequired handler set");
-            return;
-          }
-
-          const success = await this.onApiKeyRequired(provider);
-
-          // If still no API key, abort the send
-          if (!success) {
-            return;
-          }
+    // ── Patch AgentInterface.sendMessage ──
+    // The original gates on `this.session?.state.isStreaming`. We replace it
+    // with a version that skips that check but preserves everything else.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const aiAny = ai as any;
+    if (typeof aiAny.sendMessage === "function") {
+      originalSendMessage = aiAny.sendMessage.bind(ai);
+      aiAny.sendMessage = async function (input?: string, attachments?: unknown[]) {
+        // If called from MessageEditor's onSend callback, input is provided.
+        if (input !== undefined && !input.trim() && (!attachments || attachments.length === 0)) {
+          return;
         }
 
-        // Call onBeforeSend hook before sending
-        if (this.onBeforeSend) {
-          await this.onBeforeSend();
+        const session = aiAny.session;
+        if (!session) return;
+
+        // Resolve the text to send
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const editor = ai.querySelector("message-editor") as any;
+        const text: string = input ?? (editor?.value as string) ?? "";
+        if (!text.trim()) return;
+
+        // Clear editor
+        if (editor) {
+          editor.value = "";
+          editor.attachments = [];
         }
 
-        // Clear editor (check both _messageEditor and messageEditor property)
-        const messageEditor = this._messageEditor || (this as any).messageEditor || this.querySelector?.("message-editor");
-        if (messageEditor) {
-          messageEditor.value = "";
-          messageEditor.attachments = [];
-        }
-
-        // Re-enable auto-scroll if available
-        if (this._autoScroll !== undefined) {
-          this._autoScroll = true;
-        }
-
-        // Send message
-        if (attachments && attachments.length > 0) {
-          await session.prompt({
-            role: "user-with-attachments",
-            content: input,
-            attachments,
-            timestamp: Date.now(),
-          });
-        } else {
-          await session.prompt(input);
-        }
+        // Call prompt — RemoteAgent.prompt sends over WebSocket
+        await session.prompt(text);
       };
-
-      // Replace the method
-      agentInterface.sendMessage = patchedSendMessage;
-    }
-  };
-
-  /**
-   * Patch MessageEditor.isStreaming property to always return false.
-   * This makes it always show the send button and allow Enter-to-send.
-   */
-  const patchMessageEditor = () => {
-    if (!messageEditor) {
-      return;
+      patchedAgentInterface = ai as HTMLElement;
     }
 
-    // Store original descriptor if not already stored
-    if (!isStreamingDescriptor) {
-      isStreamingDescriptor = Object.getOwnPropertyDescriptor(messageEditor, "isStreaming") || {
-        value: messageEditor.isStreaming,
-        writable: true,
-        enumerable: true,
-        configurable: true,
-      };
+    // ── Patch MessageEditor.isStreaming ──
+    // Override so it always returns false, which makes the editor:
+    // - Render the send button (not stop button)
+    // - Allow Enter to trigger send in handleKeyDown
+    if (me) {
+      // Walk prototype chain to find existing descriptor
+      let proto: object | null = me;
+      while (proto && !originalIsStreamingDescriptor) {
+        originalIsStreamingDescriptor = Object.getOwnPropertyDescriptor(proto, "isStreaming");
+        if (!originalIsStreamingDescriptor) {
+          proto = Object.getPrototypeOf(proto);
+        }
+      }
 
-      // Define patched property that always returns false
-      Object.defineProperty(messageEditor, "isStreaming", {
-        get() {
-          return false;
-        },
-        set() {
-          // No-op: ignore attempts to set
-        },
-        enumerable: true,
+      Object.defineProperty(me, "isStreaming", {
+        get: () => false,
+        set: () => {}, // no-op: absorb Lit's property updates silently
         configurable: true,
       });
+      patchedMessageEditor = me as HTMLElement;
+    }
+
+    // Both patched — stop observing
+    if (patchedAgentInterface && patchedMessageEditor && observer) {
+      observer.disconnect();
+      observer = null;
     }
   };
 
-  /**
-   * Set up observer for <agent-interface> element.
-   */
-  const observeAgentInterface = () => {
-    agentInterfaceObserver = new MutationObserver(() => {
-      if (!agentInterface) {
-        // Search for agent-interface in el's subtree
-        agentInterface = el.querySelector("agent-interface") as any;
-        if (agentInterface) {
-          patchAgentInterface();
-          agentInterfaceObserver?.disconnect();
-        }
-      }
-    });
+  // Try immediately, then watch for DOM changes
+  patchElements();
+  if (!patchedAgentInterface || !patchedMessageEditor) {
+    observer = new MutationObserver(patchElements);
+    observer.observe(el, { childList: true, subtree: true });
+  }
 
-    // Watch el and its descendants for changes
-    agentInterfaceObserver.observe(el, {
-      childList: true,
-      subtree: true,
-    });
-
-    // In case agent-interface already exists, patch it now
-    agentInterface = el.querySelector("agent-interface") as any;
-    if (agentInterface) {
-      patchAgentInterface();
-      agentInterfaceObserver.disconnect();
-    }
-  };
-
-  /**
-   * Set up observer for <message-editor> element.
-   */
-  const observeMessageEditor = () => {
-    messageEditorObserver = new MutationObserver(() => {
-      if (!messageEditor) {
-        // Search for message-editor in el's subtree
-        messageEditor = el.querySelector("message-editor") as any;
-        if (messageEditor) {
-          patchMessageEditor();
-          messageEditorObserver?.disconnect();
-        }
-      }
-    });
-
-    // Watch el and its descendants for changes
-    messageEditorObserver.observe(el, {
-      childList: true,
-      subtree: true,
-    });
-
-    // In case message-editor already exists, patch it now
-    messageEditor = el.querySelector("message-editor") as any;
-    if (messageEditor) {
-      patchMessageEditor();
-      messageEditorObserver.disconnect();
-    }
-  };
-
-  // Start observing for both elements
-  observeAgentInterface();
-  observeMessageEditor();
-
-  /**
-   * Cleanup: restore original implementations and disconnect observers.
-   */
+  // Cleanup
   return () => {
+    if (observer) {
+      observer.disconnect();
+      observer = null;
+    }
     // Restore AgentInterface.sendMessage
-    if (agentInterface && originalSendMessage) {
-      agentInterface.sendMessage = originalSendMessage;
+    if (patchedAgentInterface && originalSendMessage) {
+      (patchedAgentInterface as any).sendMessage = originalSendMessage;
     }
-
-    // Restore MessageEditor.isStreaming property
-    if (messageEditor && isStreamingDescriptor) {
-      Object.defineProperty(messageEditor, "isStreaming", isStreamingDescriptor);
-    }
-
-    // Disconnect observers
-    if (agentInterfaceObserver) {
-      agentInterfaceObserver.disconnect();
-    }
-
-    if (messageEditorObserver) {
-      messageEditorObserver.disconnect();
+    // Restore MessageEditor.isStreaming
+    if (patchedMessageEditor) {
+      if (originalIsStreamingDescriptor) {
+        Object.defineProperty(patchedMessageEditor, "isStreaming", originalIsStreamingDescriptor);
+      } else {
+        delete (patchedMessageEditor as any).isStreaming;
+      }
     }
   };
 }
