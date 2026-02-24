@@ -5,11 +5,15 @@ import { useTheme } from "./useTheme";
 import SpawnModal from "./SpawnModal";
 import { patchMobileKeyboard } from "./patchMobileKeyboard";
 import { patchSendDuringStreaming } from "./patchSendDuringStreaming";
+import { registerCompactToolRenderers } from "./toolRenderers";
 import type { NodeInfo } from "./types";
 
 // Import pi-web-ui components (registers <agent-interface> custom element)
 import "@mariozechner/pi-web-ui/app.css";
 import "@mariozechner/pi-web-ui";
+
+// Register compact TUI-style tool renderers before any agent-interface renders
+registerCompactToolRenderers();
 
 // ── Lit class-field-shadowing fix ─────────────────────────────────────
 // Patches ReactiveElement.performUpdate to clean up class-field-shadowed

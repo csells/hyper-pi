@@ -31,3 +31,8 @@ Port 5180 is in use, trying another one...
 9:18:04 PM [vite] (client) hmr update /src/App.tsx
 9:18:08 PM [vite] (client) hmr update /src/App.tsx
 9:18:24 PM [vite] (client) hmr update /src/App.css
+9:50:51 PM [vite] (client) hmr update /src/App.tsx
+9:50:52 PM [vite] (client) ✨ new dependencies optimized: lit, lucide, lit/directives/ref.js
+9:50:52 PM [vite] (client) ✨ optimized dependencies changed. reloading
+9:51:41 PM [vite] (client) hmr update /src/App.tsx
+9:51:56 PM [vite] (client) hmr update /src/App.tsx

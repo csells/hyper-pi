@@ -13,7 +13,10 @@ vi.mock("./SpawnModal", () => ({
 }));
 vi.mock("./patchLit");
 vi.mock("@mariozechner/pi-web-ui/app.css", () => ({}));
-vi.mock("@mariozechner/pi-web-ui", () => ({}));
+vi.mock("@mariozechner/pi-web-ui", () => ({
+  registerToolRenderer: vi.fn(),
+  renderCollapsibleHeader: vi.fn(),
+}));
 vi.mock("@mariozechner/mini-lit/dist/MarkdownBlock.js", () => ({}));
 vi.mock("@mariozechner/mini-lit/dist/CodeBlock.js", () => ({}));
 vi.mock("./initStorage", () => ({
