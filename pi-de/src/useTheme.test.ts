@@ -1,230 +1,128 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 import { useTheme } from "./useTheme";
+import { PI_THEMES } from "./piThemes";
+
+// Mock applyPiTheme since it manipulates the document
+vi.mock("./piThemes", async () => {
+  const actual = await vi.importActual("./piThemes");
+  return {
+    ...actual,
+    applyPiTheme: vi.fn(),
+  };
+});
 
 describe("useTheme", () => {
   beforeEach(() => {
-    // Clear localStorage before each test
-    localStorage.clear();
-    
-    // Mock matchMedia
-    Object.defineProperty(window, "matchMedia", {
-      writable: true,
-      value: vi.fn().mockImplementation((query: string) => ({
-        matches: query === "(prefers-color-scheme: dark)" ? true : false,
-        media: query,
-        onchange: null,
-        addListener: vi.fn(),
-        removeListener: vi.fn(),
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn(),
-        dispatchEvent: vi.fn(),
-      })),
-    });
-  });
-
-  afterEach(() => {
     localStorage.clear();
     vi.clearAllMocks();
   });
 
-  it("initializes with dark theme by default", () => {
+  it("defaults to 'dark' theme", () => {
     const { result } = renderHook(() => useTheme());
-    expect(result.current.theme).toBe("dark");
-    expect(result.current.resolvedTheme).toBe("dark");
+    expect(result.current.themeName).toBe("dark");
+    expect(result.current.theme.name).toBe("dark");
+    expect(result.current.isDark).toBe(true);
   });
 
-  it("initializes from localStorage if present", () => {
-    localStorage.setItem("pi-de-theme", "light");
+  it("restores theme from localStorage", () => {
+    localStorage.setItem("pi-de-theme", "tokyo-night");
     const { result } = renderHook(() => useTheme());
-    expect(result.current.theme).toBe("light");
-    expect(result.current.resolvedTheme).toBe("light");
+    expect(result.current.themeName).toBe("tokyo-night");
+    expect(result.current.theme.displayName).toBe("Tokyo Night");
+    expect(result.current.isDark).toBe(true);
   });
 
-  it("initializes system theme from localStorage", () => {
+  it("falls back to dark for unknown stored theme", () => {
+    localStorage.setItem("pi-de-theme", "nonexistent-theme");
+    const { result } = renderHook(() => useTheme());
+    expect(result.current.themeName).toBe("dark");
+  });
+
+  it("migrates old 'system' value to dark", () => {
     localStorage.setItem("pi-de-theme", "system");
     const { result } = renderHook(() => useTheme());
-    expect(result.current.theme).toBe("system");
-    // Since system prefers dark by default in our mock, resolved should be dark
-    expect(result.current.resolvedTheme).toBe("dark");
+    expect(result.current.themeName).toBe("dark");
   });
 
-  it("cycles through themes in correct order: dark -> light -> system -> dark", () => {
-    const { result } = renderHook(() => useTheme());
-    
-    // Start at dark
-    expect(result.current.theme).toBe("dark");
-
-    // Cycle to light
-    act(() => {
-      result.current.cycleTheme();
-    });
-    expect(result.current.theme).toBe("light");
-    expect(result.current.resolvedTheme).toBe("light");
-
-    // Cycle to system
-    act(() => {
-      result.current.cycleTheme();
-    });
-    expect(result.current.theme).toBe("system");
-    expect(result.current.resolvedTheme).toBe("dark"); // Mock prefers dark
-
-    // Cycle back to dark
-    act(() => {
-      result.current.cycleTheme();
-    });
-    expect(result.current.theme).toBe("dark");
-    expect(result.current.resolvedTheme).toBe("dark");
-  });
-
-  it("persists theme to localStorage on change", () => {
+  it("setTheme changes the active theme", () => {
     const { result } = renderHook(() => useTheme());
 
     act(() => {
-      result.current.cycleTheme();
+      result.current.setTheme("light");
     });
-    
-    expect(localStorage.getItem("pi-de-theme")).toBe("light");
 
-    act(() => {
-      result.current.cycleTheme();
-    });
-    
-    expect(localStorage.getItem("pi-de-theme")).toBe("system");
+    expect(result.current.themeName).toBe("light");
+    expect(result.current.isDark).toBe(false);
   });
 
-  it("responds to system color scheme changes when theme is system", () => {
-    let changeCallback: ((e: MediaQueryListEvent) => void) | null = null;
-    
-    const mockMatchMedia = vi.fn().mockImplementation((query: string) => {
-      if (query === "(prefers-color-scheme: dark)") {
-        return {
-          matches: true,
-          media: query,
-          onchange: null,
-          addListener: vi.fn(),
-          removeListener: vi.fn(),
-          addEventListener: vi.fn((event: string, handler: (e: MediaQueryListEvent) => void) => {
-            if (event === "change") {
-              changeCallback = handler;
-            }
-          }),
-          removeEventListener: vi.fn(),
-          dispatchEvent: vi.fn(),
-        };
-      }
-      return {
-        matches: false,
-        media: query,
-        onchange: null,
-        addListener: vi.fn(),
-        removeListener: vi.fn(),
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn(),
-        dispatchEvent: vi.fn(),
-      };
-    });
-
-    Object.defineProperty(window, "matchMedia", {
-      writable: true,
-      value: mockMatchMedia,
-    });
-
-    localStorage.setItem("pi-de-theme", "system");
+  it("setTheme persists to localStorage", () => {
     const { result } = renderHook(() => useTheme());
 
-    // Initially mocked to prefer dark
-    expect(result.current.resolvedTheme).toBe("dark");
+    act(() => {
+      result.current.setTheme("nord");
+    });
 
-    // Simulate system preference change to light
-    if (changeCallback) {
+    expect(localStorage.getItem("pi-de-theme")).toBe("nord");
+  });
+
+  it("setTheme ignores unknown theme names", () => {
+    const { result } = renderHook(() => useTheme());
+
+    act(() => {
+      result.current.setTheme("nonexistent");
+    });
+
+    expect(result.current.themeName).toBe("dark");
+  });
+
+  it("exposes all available themes", () => {
+    const { result } = renderHook(() => useTheme());
+    expect(result.current.themes).toBe(PI_THEMES);
+    expect(result.current.themes.length).toBeGreaterThanOrEqual(7);
+  });
+
+  it("isDark is true for dark themes, false for light themes", () => {
+    const { result } = renderHook(() => useTheme());
+
+    // Test a dark theme
+    act(() => {
+      result.current.setTheme("gruvbox-dark");
+    });
+    expect(result.current.isDark).toBe(true);
+
+    // Test a light theme
+    act(() => {
+      result.current.setTheme("solarized-light");
+    });
+    expect(result.current.isDark).toBe(false);
+  });
+
+  it("theme object has all required fields", () => {
+    const { result } = renderHook(() => useTheme());
+    const t = result.current.theme;
+
+    expect(t.name).toBe("dark");
+    expect(t.displayName).toBe("Dark");
+    expect(typeof t.isDark).toBe("boolean");
+    expect(t.pageBg).toMatch(/^#/);
+    expect(t.pageFg).toMatch(/^#/);
+    expect(t.cardBg).toMatch(/^#/);
+    expect(t.colors.accent).toMatch(/^#/);
+    expect(t.colors.border).toMatch(/^#/);
+    expect(t.colors.error).toMatch(/^#/);
+    expect(t.colors.success).toMatch(/^#/);
+  });
+
+  it("can cycle through all themes", () => {
+    const { result } = renderHook(() => useTheme());
+    const names = result.current.themes.map((t) => t.name);
+
+    for (const name of names) {
       act(() => {
-        changeCallback!({ matches: false } as MediaQueryListEvent);
+        result.current.setTheme(name);
       });
+      expect(result.current.themeName).toBe(name);
     }
-
-    expect(result.current.resolvedTheme).toBe("light");
-
-    // Simulate system preference change back to dark
-    if (changeCallback) {
-      act(() => {
-        changeCallback!({ matches: true } as MediaQueryListEvent);
-      });
-    }
-
-    expect(result.current.resolvedTheme).toBe("dark");
-  });
-
-  it("resolvedTheme is dark when theme is system and system prefers dark", () => {
-    localStorage.setItem("pi-de-theme", "system");
-    const { result } = renderHook(() => useTheme());
-    expect(result.current.resolvedTheme).toBe("dark");
-  });
-
-  it("resolvedTheme is light when theme is dark (explicit)", () => {
-    const { result } = renderHook(() => useTheme());
-    
-    act(() => {
-      result.current.cycleTheme(); // light
-    });
-    
-    expect(result.current.resolvedTheme).toBe("light");
-  });
-
-  it("does not respond to system changes when theme is not system", () => {
-    let changeCallback: ((e: MediaQueryListEvent) => void) | null = null;
-    
-    const mockMatchMedia = vi.fn().mockImplementation((query: string) => {
-      if (query === "(prefers-color-scheme: dark)") {
-        return {
-          matches: true,
-          media: query,
-          onchange: null,
-          addListener: vi.fn(),
-          removeListener: vi.fn(),
-          addEventListener: vi.fn((event: string, handler: (e: MediaQueryListEvent) => void) => {
-            if (event === "change") {
-              changeCallback = handler;
-            }
-          }),
-          removeEventListener: vi.fn(),
-          dispatchEvent: vi.fn(),
-        };
-      }
-      return {
-        matches: false,
-        media: query,
-        onchange: null,
-        addListener: vi.fn(),
-        removeListener: vi.fn(),
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn(),
-        dispatchEvent: vi.fn(),
-      };
-    });
-
-    Object.defineProperty(window, "matchMedia", {
-      writable: true,
-      value: mockMatchMedia,
-    });
-
-    const { result } = renderHook(() => useTheme());
-    
-    // Set to light (explicit)
-    act(() => {
-      result.current.cycleTheme();
-    });
-    
-    expect(result.current.resolvedTheme).toBe("light");
-
-    // Try to simulate system preference change
-    if (changeCallback) {
-      act(() => {
-        changeCallback!({ matches: false } as MediaQueryListEvent);
-      });
-    }
-
-    // Should still be light (not affected by system change)
-    expect(result.current.resolvedTheme).toBe("light");
   });
 });

@@ -35,7 +35,7 @@ export default function App() {
   const { status: hvStatus, nodes, wsRef: hvWsRef } = useHypivisor(HYPIVISOR_PORT, HYPI_TOKEN);
   const [activeNode, setActiveNode] = useState<NodeInfo | null>(null);
   const agent = useAgent(activeNode);
-  const { theme, resolvedTheme, cycleTheme } = useTheme();
+  const { themeName, theme, themes, isDark, setTheme } = useTheme();
   const {
     isLoadingHistory,
     hasMoreHistory,
@@ -209,13 +209,22 @@ export default function App() {
   }, [isLoadingHistory]);
 
   return (
-    <div className={`pi-de-layout ${activeNode ? "agent-selected" : ""} ${resolvedTheme === "light" ? "pi-de-light" : ""}`}>
+    <div className={`pi-de-layout ${activeNode ? "agent-selected" : ""} ${!isDark ? "pi-de-light" : ""}`}>
       {/* ── LEFT: Roster ─────────────────────────────────── */}
       <div className="sidebar roster-pane">
         <h2>Hyper-Pi Mesh</h2>
-        <button className="theme-toggle" onClick={cycleTheme} title="Toggle theme: dark → light → system">
-          {theme === "dark" ? "🌙 Dark" : theme === "light" ? "☀️ Light" : "🖥️ System"}
-        </button>
+        <select
+          className="theme-select"
+          value={themeName}
+          onChange={(e) => setTheme(e.target.value)}
+          title="Select theme"
+        >
+          {themes.map((t) => (
+            <option key={t.name} value={t.name}>
+              {t.isDark ? "🌙" : "☀️"} {t.displayName}
+            </option>
+          ))}
+        </select>
 
         {hvStatus !== "connected" && (
           <div className="hv-status-banner">
@@ -343,7 +352,7 @@ export default function App() {
                 )}
 
                 {/* pi-web-ui AgentInterface web component */}
-                <div className={`agent-interface-container ${resolvedTheme}`}>
+                <div className={`agent-interface-container ${isDark ? "dark" : "light"}`}>
                   <agent-interface ref={agentInterfaceRef} />
                 </div>
               </>

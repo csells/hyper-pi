@@ -31,7 +31,7 @@
       last selected agent
 - [x] check that Spawn works
 - [x] why does the tool output look SO different from the tui UI?
-- [x] theming: support all of the pi agent themes
+- [x] theming: 7 themes (dark, light, gruvbox-dark, tokyo-night, nord, solarized-dark, solarized-light) with full pi color token mapping to CSS custom properties
 - [x] need a cancel button AND a submit button during streaming responses
 - [x] show the name of the session as well as the project
   - [x] make it easy to name the session

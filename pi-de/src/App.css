@@ -269,31 +269,33 @@ body {
 }
 
 /* ── Theme Toggle Button ──────────────────────────────────── */
-.theme-toggle {
-  background: transparent;
+.theme-select {
+  background: var(--bg-panel);
   border: 1px solid var(--border-color);
   border-radius: 4px;
   color: var(--text-main);
-  padding: 0.4rem 0.8rem;
+  padding: 0.35rem 0.6rem;
   cursor: pointer;
-  font-size: 0.85rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.4rem;
+  font-size: 0.8rem;
   min-height: 32px;
-  min-width: 80px;
   font-family: "Fira Code", monospace;
   transition: all 0.2s ease;
+  appearance: auto;
+  width: 100%;
 }
 
-.theme-toggle:hover {
-  background: var(--bg-panel-hover);
+.theme-select:hover {
   border-color: var(--accent);
 }
 
-.theme-toggle:active {
+.theme-select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.theme-select option {
   background: var(--bg-dark);
+  color: var(--text-main);
 }
 
 /* ── Main Stage (Center) ───────────────────────────────────── */
