@@ -1,15 +1,24 @@
 {
   "id": "task-4",
   "title": "Roster grouping by project with PID display and working indicator",
-  "status": "in_progress",
+  "status": "done",
   "depends_on": [
     "task-1",
     "task-3"
   ],
   "created_at": "2026-02-24T03:24:39.382Z",
-  "updated_at": "2026-02-24T03:27:51.918Z",
+  "updated_at": "2026-02-24T03:34:34.566Z",
   "attempt_count": 2,
   "started_at": "2026-02-24T03:27:51.901Z",
   "base_commit": "f1f8082fcde0bc4a65ac52f501ddddeb5767d655",
-  "assigned_to": "WildBear"
+  "completed_at": "2026-02-24T03:34:34.566Z",
+  "summary": "Implemented roster grouping by project with PID display and working indicator. Added useMemo grouping, collapsible headers with agent count badges, PID metadata display, working class on selected streaming agent's status dot, comprehensive CSS styles, and complete test coverage. All 115 tests passing, build succeeds.\",",
+  "evidence": {
+    "commits": [
+      "a2afb8c"
+    ],
+    "tests": [
+      "npm test — all 115 tests passing"
+    ]
+  }
 }

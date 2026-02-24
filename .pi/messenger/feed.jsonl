@@ -111,3 +111,15 @@
 {"ts":"2026-02-24T03:33:56.236Z","agent":"WildBear","type":"edit","target":"pi-de/src/App.test.tsx"}
 {"ts":"2026-02-24T03:34:00.160Z","agent":"WildBear","type":"test","preview":"passed"}
 {"ts":"2026-02-24T03:34:01.288Z","agent":"WildBear","type":"edit","target":"pi-de/src/App.test.tsx"}
+{"ts":"2026-02-24T03:34:29.136Z","agent":"WildBear","type":"commit","preview":"feat(pi-de): Roster grouping by project with PID display and working indicator\n\n- Add useMemo to group nodes by projectName (last path segment of cwd)\n- Add collapsedGroups state and toggleGroup function for collapsible headers\n- Implement grouped JSX rendering with project headers and agent count badges\n- Add PID display in node card metadata (e.g., "}
+{"ts":"2026-02-24T03:34:31.944Z","agent":"WildBear","type":"release","target":"pi-de/src/App.tsx"}
+{"ts":"2026-02-24T03:34:31.945Z","agent":"WildBear","type":"release","target":"pi-de/src/App.css"}
+{"ts":"2026-02-24T03:34:31.945Z","agent":"WildBear","type":"release","target":"pi-de/src/App.test.tsx"}
+{"ts":"2026-02-24T03:34:34.566Z","agent":"WildBear","type":"task.done","target":"task-4","preview":"Implemented roster grouping by project with PID display and working indicator. Added useMemo grouping, collapsible headers with agent count badges, PID metadata display, working class on selected streaming agent's status dot, comprehensive CSS styles, and complete test coverage. All 115 tests passing, build succeeds.\","}
+{"ts":"2026-02-24T03:34:36.671Z","agent":"WildBear","type":"message","preview":"Completed task-4: Roster grouping by project with PID display and working indicator. Implemented grouping logic, PID metadata, working status dot, CSS styles, and comprehensive tests. All 115 tests..."}
+{"ts":"2026-02-24T03:34:37.071Z","agent":"NiceEagle","type":"test","preview":"passed"}
+{"ts":"2026-02-24T03:35:22.266Z","agent":"NiceEagle","type":"test","preview":"passed"}
+{"ts":"2026-02-24T03:35:22.514Z","agent":"NiceEagle","type":"edit","target":"/Users/csells/Code/csells/hyper-pi/pi-de/src/useTheme.test.ts"}
+{"ts":"2026-02-24T03:35:59.374Z","agent":"NiceEagle","type":"test","preview":"passed"}
+{"ts":"2026-02-24T03:36:41.480Z","agent":"NiceEagle","type":"commit","preview":"fix(pi-de): remove unused Theme type import in useTheme.test.ts"}
+{"ts":"2026-02-24T03:49:13.774Z","agent":"NiceEagle","type":"edit","target":"/Users/csells/Code/csells/hyper-pi/TODO.md"}

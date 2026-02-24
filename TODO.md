@@ -3,23 +3,23 @@
 ## quality of life
 
 - I STILL can't enter a prompt while the agent is producing it's result!!!
-- group chats under projects
+- [x] group chats under projects
 - autocomplete for commands/skills when the user presses "/"
 - autocomplete for at-file references (`@`)
-- show the system pid for debugging
-- show a working indicator of some kind
-- scroll position when selecting an agent isn't at the bottom -- it's at some
+- [x] show the system pid for debugging
+- [x] show a working indicator of some kind
+- [x] scroll position when selecting an agent isn't at the bottom -- it's at some
   random spot, perhaps based on the previous scroll position from the last
   selected agent
 - check that Spawn works
 - why does the tool output look SO different from the tui UI?
 - theming: support all of the pi agent themes
 - need a cancel button AND a submit button during streaming responses
-- show the name of the session as well as the project
-  - make it easy to name the session
-- what are the greyed out agents for? why do I want to click on dead agents and
+- [x] show the name of the session as well as the project
+  - [x] make it easy to name the session
+- [x] what are the greyed out agents for? why do I want to click on dead agents and
   see no content?
-- show the session as working or idle with a green or yellow dot respectively
+- [x] show the session as working or idle with a green or yellow dot respectively
 
 ## Files
 
