@@ -314,16 +314,6 @@ export default function App() {
                 </div>
               </div>
               <span className={`status-dot ${isAgentStreaming ? "working" : "active"}`} />
-              {isAgentStreaming && (
-                <button
-                  className="btn-cancel-stream"
-                  onClick={() => agent.remoteAgent.abort()}
-                  title="Cancel stream"
-                  aria-label="Cancel streaming"
-                >
-                  ■
-                </button>
-              )}
               {agent.status !== "connected" && (
                 <span className="agent-status">
                   {agent.status === "connecting" && "Connecting…"}

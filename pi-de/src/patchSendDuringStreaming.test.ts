@@ -1,46 +1,31 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { patchSendDuringStreaming } from "./patchSendDuringStreaming";
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 describe("patchSendDuringStreaming", () => {
   let container: HTMLElement;
   let agentInterface: HTMLElement;
   let messageEditor: HTMLElement;
-  let textarea: HTMLTextAreaElement;
 
   beforeEach(() => {
-    // Create test DOM structure
     container = document.createElement("div");
     agentInterface = document.createElement("agent-interface");
     messageEditor = document.createElement("message-editor");
-    textarea = document.createElement("textarea");
 
-    messageEditor.appendChild(textarea);
     agentInterface.appendChild(messageEditor);
     container.appendChild(agentInterface);
     document.body.appendChild(container);
 
-    // Set up mock session on agent-interface
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (agentInterface as any).session = {
       state: { isStreaming: true },
       prompt: vi.fn(),
     };
 
-    // Mock the original sendMessage (as would exist on real AgentInterface from pi-web-ui)
-    // The original sendMessage is async and gates on isStreaming
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (agentInterface as any).sendMessage = vi.fn(async function (this: any) {
-      // Original would gate here: if (this.session?.state.isStreaming) return;
-      // So our patch should allow this
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      if (!(this as any).session) return;
-      const text = textarea.value.trim();
-      if (!text) return;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (this as any).session.prompt(text);
-      textarea.value = "";
-      textarea.focus();
-    });
+    (agentInterface as any).sendMessage = vi.fn();
+    (messageEditor as any).value = "";
+    (messageEditor as any).attachments = [];
+    (messageEditor as any).requestUpdate = vi.fn();
   });
 
   afterEach(() => {
@@ -49,261 +34,236 @@ describe("patchSendDuringStreaming", () => {
     }
   });
 
-  describe("patchSendDuringStreaming core functionality", () => {
-    it("returns a cleanup function", () => {
-      const cleanup = patchSendDuringStreaming(agentInterface);
-      expect(cleanup).toBeInstanceOf(Function);
-    });
+  // ── Core ──────────────────────────────────────────────────
 
-    it("patches AgentInterface.sendMessage", () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const originalSendMessage = (agentInterface as any).sendMessage;
-      const cleanup = patchSendDuringStreaming(agentInterface);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const patchedSendMessage = (agentInterface as any).sendMessage;
+  it("returns a cleanup function", () => {
+    const cleanup = patchSendDuringStreaming(agentInterface);
+    expect(cleanup).toBeInstanceOf(Function);
+    cleanup();
+  });
 
-      // Should be a different function
-      expect(typeof patchedSendMessage).toBe("function");
-      
-      cleanup();
-    });
+  it("patches AgentInterface.sendMessage", () => {
+    const original = (agentInterface as any).sendMessage;
+    const cleanup = patchSendDuringStreaming(agentInterface);
+    // Should be replaced (patch wraps it)
+    expect(typeof (agentInterface as any).sendMessage).toBe("function");
+    cleanup();
+  });
 
-    it("patches MessageEditor.isStreaming to always return false", () => {
-      const cleanup = patchSendDuringStreaming(agentInterface);
+  // ── isStreaming: conditional button logic ──────────────────
 
-      // Set isStreaming to true
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  it("isStreaming returns true when agent is streaming and input is empty (stop button)", () => {
+    const cleanup = patchSendDuringStreaming(agentInterface);
+
+    (messageEditor as any).isStreaming = true; // agent is streaming
+    (messageEditor as any).value = "";
+
+    expect((messageEditor as any).isStreaming).toBe(true);
+    cleanup();
+  });
+
+  it("isStreaming returns false when agent is streaming but input has text (send button)", () => {
+    const cleanup = patchSendDuringStreaming(agentInterface);
+
+    (messageEditor as any).isStreaming = true; // agent is streaming
+    (messageEditor as any).value = "hello";
+
+    expect((messageEditor as any).isStreaming).toBe(false);
+    cleanup();
+  });
+
+  it("isStreaming returns false when agent is not streaming regardless of input", () => {
+    const cleanup = patchSendDuringStreaming(agentInterface);
+
+    (messageEditor as any).isStreaming = false; // agent idle
+    (messageEditor as any).value = "";
+    expect((messageEditor as any).isStreaming).toBe(false);
+
+    (messageEditor as any).value = "hello";
+    expect((messageEditor as any).isStreaming).toBe(false);
+
+    cleanup();
+  });
+
+  it("isStreaming treats whitespace-only input as empty (shows stop button)", () => {
+    const cleanup = patchSendDuringStreaming(agentInterface);
+
+    (messageEditor as any).isStreaming = true;
+    (messageEditor as any).value = "   ";
+
+    expect((messageEditor as any).isStreaming).toBe(true);
+    cleanup();
+  });
+
+  it("setter calls requestUpdate to trigger re-render", () => {
+    const cleanup = patchSendDuringStreaming(agentInterface);
+
+    (messageEditor as any).isStreaming = true;
+    expect((messageEditor as any).requestUpdate).toHaveBeenCalled();
+
+    cleanup();
+  });
+
+  it("assignment does not throw", () => {
+    const cleanup = patchSendDuringStreaming(agentInterface);
+
+    expect(() => {
       (messageEditor as any).isStreaming = true;
-      // Should still return false
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      expect((messageEditor as any).isStreaming).toBe(false);
-
-      // Set to false
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (messageEditor as any).isStreaming = false;
-      // Should still return false
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      expect((messageEditor as any).isStreaming).toBe(false);
+    }).not.toThrow();
 
-      cleanup();
-    });
-
-    it("cleanup restores original behavior", () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const originalSendMessage = (agentInterface as any).sendMessage;
-      const cleanup = patchSendDuringStreaming(agentInterface);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const patchedSendMessage = (agentInterface as any).sendMessage;
-
-      // Verify it was patched
-      expect(typeof patchedSendMessage).toBe("function");
-
-      cleanup();
-
-      // After cleanup, should be a function (restored or original)
-      // Note: might not be exact same object due to .bind() in implementation
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      expect(typeof (agentInterface as any).sendMessage).toBe("function");
-    });
+    cleanup();
   });
 
-  describe("MessageEditor.isStreaming patching", () => {
-    it("always returns false regardless of assignment attempts", () => {
-      const cleanup = patchSendDuringStreaming(agentInterface);
+  // ── sendMessage patch ─────────────────────────────────────
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      expect((messageEditor as any).isStreaming).toBe(false);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (messageEditor as any).isStreaming = true;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      expect((messageEditor as any).isStreaming).toBe(false);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (messageEditor as any).isStreaming = false;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      expect((messageEditor as any).isStreaming).toBe(false);
+  it("patched sendMessage calls session.prompt with editor text", async () => {
+    const cleanup = patchSendDuringStreaming(agentInterface);
+    const session = (agentInterface as any).session;
 
-      cleanup();
-    });
+    // Simulate text in the editor
+    (messageEditor as any).value = "test message";
 
-    it("allows assignment without errors (no-op setter)", () => {
-      const cleanup = patchSendDuringStreaming(agentInterface);
+    await (agentInterface as any).sendMessage();
+    expect(session.prompt).toHaveBeenCalledWith("test message");
 
-      expect(() => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (messageEditor as any).isStreaming = true;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (messageEditor as any).isStreaming = false;
-      }).not.toThrow();
-
-      cleanup();
-    });
-
-    it("cleanup restores original isStreaming behavior", () => {
-      const cleanup = patchSendDuringStreaming(agentInterface);
-
-      // Patched: always false
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      expect((messageEditor as any).isStreaming).toBe(false);
-
-      cleanup();
-
-      // After cleanup, cleanup doesn't throw
-      expect(() => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const val = (messageEditor as any).isStreaming;
-      }).not.toThrow();
-    });
+    cleanup();
   });
 
-  describe("MutationObserver integration", () => {
-    it("finds agent-interface added later via MutationObserver", async () => {
-      const delayedContainer = document.createElement("div");
-      container.appendChild(delayedContainer);
+  it("patched sendMessage skips empty input", async () => {
+    const cleanup = patchSendDuringStreaming(agentInterface);
+    const session = (agentInterface as any).session;
 
-      const cleanup = patchSendDuringStreaming(delayedContainer);
+    (messageEditor as any).value = "";
 
-      // Add agent-interface after observer is set up
-      const delayedAgentInterface = document.createElement("agent-interface");
-      const delayedMessageEditor = document.createElement("message-editor");
-      const delayedTextarea = document.createElement("textarea");
+    await (agentInterface as any).sendMessage();
+    expect(session.prompt).not.toHaveBeenCalled();
 
-      delayedMessageEditor.appendChild(delayedTextarea);
-      delayedAgentInterface.appendChild(delayedMessageEditor);
-      delayedContainer.appendChild(delayedAgentInterface);
-
-      // Set up session and original sendMessage
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (delayedAgentInterface as any).session = {
-        state: { isStreaming: true },
-        prompt: vi.fn(),
-      };
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (delayedAgentInterface as any).sendMessage = vi.fn();
-
-      // Give MutationObserver time to fire
-      await new Promise((resolve) => setTimeout(resolve, 0));
-
-      // Check that patches were applied
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      expect((delayedMessageEditor as any).isStreaming).toBe(false);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      expect(typeof (delayedAgentInterface as any).sendMessage).toBe("function");
-
-      cleanup();
-    });
-
-    it("patches elements that are already present", () => {
-      const cleanup = patchSendDuringStreaming(agentInterface);
-
-      // Elements were present at init time, should be patched
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      expect((messageEditor as any).isStreaming).toBe(false);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      expect(typeof (agentInterface as any).sendMessage).toBe("function");
-
-      cleanup();
-    });
-
-    it("disconnects observer after both elements are patched", async () => {
-      const delayedContainer = document.createElement("div");
-      container.appendChild(delayedContainer);
-
-      const cleanup = patchSendDuringStreaming(delayedContainer);
-
-      // Add both elements
-      const delayedAgentInterface = document.createElement("agent-interface");
-      const delayedMessageEditor = document.createElement("message-editor");
-
-      delayedAgentInterface.appendChild(delayedMessageEditor);
-      delayedContainer.appendChild(delayedAgentInterface);
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (delayedAgentInterface as any).sendMessage = vi.fn();
-
-      // Give MutationObserver time to fire
-      await new Promise((resolve) => setTimeout(resolve, 0));
-
-      // Cleanup should not throw even though observer is disconnected
-      expect(() => {
-        cleanup();
-      }).not.toThrow();
-    });
+    cleanup();
   });
 
-  describe("Composition with mobile patch", () => {
-    it("MessageEditor.isStreaming always false does not interfere with handleKeyDown", () => {
-      const cleanup = patchSendDuringStreaming(agentInterface);
+  it("patched sendMessage skips whitespace-only explicit input", async () => {
+    const cleanup = patchSendDuringStreaming(agentInterface);
+    const session = (agentInterface as any).session;
 
-      // Simulate handleKeyDown logic that checks isStreaming
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const wouldAllowSend = !(messageEditor as any).isStreaming;
+    await (agentInterface as any).sendMessage("   ", []);
+    expect(session.prompt).not.toHaveBeenCalled();
 
-      // Should allow sending since isStreaming is false
-      expect(wouldAllowSend).toBe(true);
-
-      cleanup();
-    });
-
-    it("can be called multiple times safely", () => {
-      expect(() => {
-        const cleanup1 = patchSendDuringStreaming(agentInterface);
-        cleanup1();
-
-        const cleanup2 = patchSendDuringStreaming(agentInterface);
-        cleanup2();
-      }).not.toThrow();
-    });
+    cleanup();
   });
 
-  describe("Edge cases and robustness", () => {
-    it("handles missing message-editor gracefully", () => {
-      const sparseContainer = document.createElement("div");
-      const sparseAgentInterface = document.createElement("agent-interface");
-      sparseContainer.appendChild(sparseAgentInterface);
-      document.body.appendChild(sparseContainer);
+  it("patched sendMessage clears editor after sending", async () => {
+    const cleanup = patchSendDuringStreaming(agentInterface);
 
-      expect(() => {
-        const cleanup = patchSendDuringStreaming(sparseContainer);
-        cleanup();
-      }).not.toThrow();
+    (messageEditor as any).value = "test message";
+    await (agentInterface as any).sendMessage();
+    expect((messageEditor as any).value).toBe("");
 
-      document.body.removeChild(sparseContainer);
-    });
+    cleanup();
+  });
 
-    it("returns cleanup function even if elements not found initially", () => {
-      const emptyContainer = document.createElement("div");
-      document.body.appendChild(emptyContainer);
+  // ── Cleanup ───────────────────────────────────────────────
 
-      const cleanup = patchSendDuringStreaming(emptyContainer);
-      expect(cleanup).toBeInstanceOf(Function);
+  it("cleanup restores original sendMessage", () => {
+    const cleanup = patchSendDuringStreaming(agentInterface);
+    cleanup();
+    expect(typeof (agentInterface as any).sendMessage).toBe("function");
+  });
 
-      // Cleanup should not throw even though patches were not applied
-      expect(() => {
-        cleanup();
-      }).not.toThrow();
+  it("cleanup restores isStreaming behavior", () => {
+    const cleanup = patchSendDuringStreaming(agentInterface);
 
-      document.body.removeChild(emptyContainer);
-    });
+    // Patched: conditional
+    (messageEditor as any).isStreaming = true;
+    (messageEditor as any).value = "";
+    expect((messageEditor as any).isStreaming).toBe(true);
 
-    it("handles missing agent-interface gracefully", () => {
-      const containerWithoutAgentInterface = document.createElement("div");
-      document.body.appendChild(containerWithoutAgentInterface);
+    cleanup();
 
-      expect(() => {
-        const cleanup = patchSendDuringStreaming(containerWithoutAgentInterface);
-        cleanup();
-      }).not.toThrow();
+    // After cleanup, should not throw
+    expect(() => {
+      const _val = (messageEditor as any).isStreaming;
+    }).not.toThrow();
+  });
 
-      document.body.removeChild(containerWithoutAgentInterface);
-    });
+  it("cleanup can be called multiple times safely", () => {
+    const cleanup = patchSendDuringStreaming(agentInterface);
+    expect(() => {
+      cleanup();
+      cleanup();
+    }).not.toThrow();
+  });
 
-    it("returns a function that can be called multiple times safely", () => {
-      const cleanup = patchSendDuringStreaming(agentInterface);
+  // ── MutationObserver ──────────────────────────────────────
 
-      expect(() => {
-        cleanup();
-        cleanup();
-      }).not.toThrow();
-    });
+  it("finds agent-interface added later via MutationObserver", async () => {
+    const delayedContainer = document.createElement("div");
+    container.appendChild(delayedContainer);
+
+    const cleanup = patchSendDuringStreaming(delayedContainer);
+
+    const delayedAI = document.createElement("agent-interface");
+    const delayedME = document.createElement("message-editor");
+    delayedAI.appendChild(delayedME);
+    delayedContainer.appendChild(delayedAI);
+
+    (delayedAI as any).session = { state: { isStreaming: true }, prompt: vi.fn() };
+    (delayedAI as any).sendMessage = vi.fn();
+    (delayedME as any).value = "";
+    (delayedME as any).requestUpdate = vi.fn();
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    // isStreaming should be patched: streaming + empty → true
+    (delayedME as any).isStreaming = true;
+    expect((delayedME as any).isStreaming).toBe(true);
+
+    cleanup();
+  });
+
+  it("patches elements that are already present", () => {
+    const cleanup = patchSendDuringStreaming(agentInterface);
+
+    (messageEditor as any).isStreaming = true;
+    (messageEditor as any).value = "hello";
+    expect((messageEditor as any).isStreaming).toBe(false);
+
+    cleanup();
+  });
+
+  // ── Edge cases ────────────────────────────────────────────
+
+  it("handles missing message-editor gracefully", () => {
+    const sparse = document.createElement("div");
+    const ai = document.createElement("agent-interface");
+    sparse.appendChild(ai);
+    document.body.appendChild(sparse);
+
+    expect(() => {
+      const cleanup = patchSendDuringStreaming(sparse);
+      cleanup();
+    }).not.toThrow();
+
+    document.body.removeChild(sparse);
+  });
+
+  it("returns cleanup even if elements not found initially", () => {
+    const empty = document.createElement("div");
+    document.body.appendChild(empty);
+
+    const cleanup = patchSendDuringStreaming(empty);
+    expect(cleanup).toBeInstanceOf(Function);
+    expect(() => cleanup()).not.toThrow();
+
+    document.body.removeChild(empty);
+  });
+
+  it("can be called multiple times on same element", () => {
+    expect(() => {
+      const c1 = patchSendDuringStreaming(agentInterface);
+      c1();
+      const c2 = patchSendDuringStreaming(agentInterface);
+      c2();
+    }).not.toThrow();
   });
 });

@@ -148,6 +148,29 @@ describe("piThemes", () => {
       expect(style.getPropertyValue("--pi-error")).toMatch(/^#/);
     });
 
+    it("sets sidebar chrome variables (--bg-dark, --accent, etc.)", () => {
+      const dark = getPiTheme("dark")!;
+      applyPiTheme(dark);
+
+      const style = document.documentElement.style;
+      expect(style.getPropertyValue("--bg-dark")).toBe(dark.pageBg);
+      expect(style.getPropertyValue("--bg-panel")).toBe(dark.cardBg);
+      expect(style.getPropertyValue("--text-main")).toBe(dark.pageFg);
+      expect(style.getPropertyValue("--accent")).toBe(dark.colors.accent);
+      expect(style.getPropertyValue("--border-color")).toBe(dark.colors.borderMuted);
+      expect(style.getPropertyValue("--danger")).toBe(dark.colors.error);
+    });
+
+    it("updates sidebar chrome variables when switching themes", () => {
+      applyPiTheme(getPiTheme("dark")!);
+      const darkAccent = document.documentElement.style.getPropertyValue("--accent");
+
+      applyPiTheme(getPiTheme("solarized-light")!);
+      const lightAccent = document.documentElement.style.getPropertyValue("--accent");
+
+      expect(darkAccent).not.toBe(lightAccent);
+    });
+
     it("can apply different themes sequentially", () => {
       applyPiTheme(getPiTheme("dark")!);
       const darkBg = document.documentElement.style.getPropertyValue("--background");

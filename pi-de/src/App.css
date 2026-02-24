@@ -713,6 +713,7 @@ body {
   min-height: 44px;
   display: flex;
   align-items: center;
+  color: var(--text-main);
 }
 
 .dir-item:hover {
@@ -776,7 +777,7 @@ body {
   background: var(--accent);
   border: none;
   border-radius: 4px;
-  color: var(--bg-dark);
+  color: #ffffff;
   font-weight: 600;
   cursor: pointer;
   min-height: 44px;

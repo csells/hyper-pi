@@ -36,3 +36,8 @@ Port 5180 is in use, trying another one...
 9:50:52 PM [vite] (client) ✨ optimized dependencies changed. reloading
 9:51:41 PM [vite] (client) hmr update /src/App.tsx
 9:51:56 PM [vite] (client) hmr update /src/App.tsx
+11:08:19 PM [vite] (client) hmr update /src/App.tsx
+11:08:47 PM [vite] (client) hmr update /src/App.css
+11:08:54 PM [vite] (client) hmr update /src/App.css
+11:10:05 PM [vite] (client) hmr update /src/App.tsx
+11:10:50 PM [vite] (client) hmr update /src/App.tsx

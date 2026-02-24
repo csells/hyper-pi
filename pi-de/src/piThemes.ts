@@ -503,7 +503,18 @@ export function applyPiTheme(theme: PiTheme): void {
   root.style.setProperty("--sidebar-border", hexToOklch(c.borderMuted));
   root.style.setProperty("--sidebar-ring", hexToOklch(c.border));
 
-  // Pi-DE specific custom properties for the sidebar chrome
+  // Pi-DE sidebar chrome variables (used by App.css)
+  root.style.setProperty("--bg-dark", theme.pageBg);
+  root.style.setProperty("--bg-panel", theme.cardBg);
+  root.style.setProperty("--bg-panel-hover", c.selectedBg);
+  root.style.setProperty("--text-main", theme.pageFg);
+  root.style.setProperty("--text-muted", c.muted);
+  root.style.setProperty("--accent", c.accent);
+  root.style.setProperty("--accent-glow", c.accent + "66"); // 40% alpha
+  root.style.setProperty("--border-color", c.borderMuted);
+  root.style.setProperty("--danger", c.error);
+
+  // Pi-DE specific custom properties for component-level styling
   root.style.setProperty("--pi-page-bg", theme.pageBg);
   root.style.setProperty("--pi-page-fg", theme.pageFg);
   root.style.setProperty("--pi-card-bg", theme.cardBg);

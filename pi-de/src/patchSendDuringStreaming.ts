@@ -6,8 +6,11 @@
  * 1. AgentInterface.sendMessage() — remove the isStreaming gate so prompt()
  *    is called even during streaming. pi-socket handles follow-ups via
  *    `pi.sendUserMessage(text, { deliverAs: "followUp" })`.
- * 2. MessageEditor.isStreaming property — always return false so the editor
- *    renders the send button (not stop button) and Enter-to-send works.
+ * 2. MessageEditor.isStreaming property — dynamically returns:
+ *    - true (show stop button) when agent is streaming AND input is empty
+ *    - false (show send button) when input has text
+ *    This gives mobile users a stop button when idle and a send button
+ *    when they've typed something, all in the same button location.
  *
  * Uses MutationObserver to find elements in light DOM, same pattern as
  * patchMobileKeyboard.ts. Returns a cleanup function.
@@ -27,6 +30,9 @@ export function patchSendDuringStreaming(el: HTMLElement): () => void {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let originalSendMessage: ((...args: any[]) => any) | null = null;
   let originalIsStreamingDescriptor: PropertyDescriptor | undefined;
+
+  // Track the real streaming state from Lit property updates
+  let realIsStreaming = false;
 
   const patchElements = () => {
     // Find agent-interface (el itself or a descendant)
@@ -73,9 +79,10 @@ export function patchSendDuringStreaming(el: HTMLElement): () => void {
     }
 
     // ── Patch MessageEditor.isStreaming ──
-    // Override so it always returns false, which makes the editor:
-    // - Render the send button (not stop button)
-    // - Allow Enter to trigger send in handleKeyDown
+    // Override so it dynamically decides which button to show:
+    // - Agent streaming + empty input → isStreaming=true → stop button
+    // - Agent streaming + text in input → isStreaming=false → send button
+    // - Agent idle → isStreaming=false → send button
     if (me) {
       // Walk prototype chain to find existing descriptor
       let proto: object | null = me;
@@ -86,9 +93,22 @@ export function patchSendDuringStreaming(el: HTMLElement): () => void {
         }
       }
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const meAny = me as any;
+
       Object.defineProperty(me, "isStreaming", {
-        get: () => false,
-        set: () => {}, // no-op: absorb Lit's property updates silently
+        get: () => {
+          if (!realIsStreaming) return false;
+          // When streaming: show stop button only if input is empty
+          const value: string = meAny.value ?? "";
+          return !value.trim();
+        },
+        set: (v: boolean) => {
+          // Capture the real value from Lit's property system
+          realIsStreaming = v;
+          // Trigger a re-render so the button updates
+          meAny.requestUpdate?.();
+        },
         configurable: true,
       });
       patchedMessageEditor = me as HTMLElement;

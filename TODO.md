@@ -52,14 +52,16 @@
 - [x] why does the tool output look SO different from the tui UI?
 - [x] theming: 7 themes (dark, light, gruvbox-dark, tokyo-night, nord, solarized-dark, solarized-light) with full pi color token mapping to CSS custom properties
 - [~] need a cancel button AND a submit button during streaming responses
-      (submit works; cancel button renders but `abort()` is a no-op — see
-      abort/cancel item in End-to-End section for the full design)
+      (MessageEditor now conditionally shows stop vs send based on input
+      content — empty input shows stop, typed text shows send. But
+      `RemoteAgent.abort()` is still a no-op — see abort/cancel item in
+      End-to-End section for the protocol work needed.)
 - [x] show the name of the session as well as the project
   - [x] make it easy to name the session
 - [x] what are the greyed out agents for? why do I want to click on dead agents
       and see no content?
 - [x] show the session as working or idle with a green or yellow dot
       respectively
-- [ ] theming contrast bugs: dark themes make the Spawn Agent button unreadable
+- [x] theming contrast bugs: dark themes make the Spawn Agent button unreadable
       (dark grey on black); light themes make the SpawnModal folder selection
       unreadable (off-white on white background)

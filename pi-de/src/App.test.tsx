@@ -596,7 +596,7 @@ describe("App", () => {
     });
   });
 
-  it("shows cancel button in stage header when agent is streaming", async () => {
+  it("stage header shows status dot but no cancel button (cancel is in MessageEditor)", async () => {
     vi.mocked(useAgentModule.useAgent).mockReturnValue({
       status: "connected",
       remoteAgent: { abort: vi.fn() } as any,
@@ -610,98 +610,14 @@ describe("App", () => {
 
     render(<App />);
 
-    // Select a node
     const nodeCardButton = screen.getByText("localhost:9000").closest("button");
     fireEvent.click(nodeCardButton!);
 
-    // Cancel button should be visible
-    await waitFor(() => {
-      const cancelButton = document.querySelector(".btn-cancel-stream");
-      expect(cancelButton).toBeInTheDocument();
-      expect(cancelButton?.textContent).toBe("■");
-    });
-  });
-
-  it("hides cancel button in stage header when agent is idle", async () => {
-    vi.mocked(useAgentModule.useAgent).mockReturnValue({
-      status: "connected",
-      remoteAgent: {} as any,
-      historyTruncated: false,
-      sendMessage: vi.fn(),
-      isLoadingHistory: false,
-      hasMoreHistory: true,
-      loadOlderMessages: vi.fn(),
-      isAgentStreaming: false,
-    });
-
-    render(<App />);
-
-    // Select a node
-    const nodeCardButton = screen.getByText("localhost:9000").closest("button");
-    fireEvent.click(nodeCardButton!);
-
-    // Cancel button should not be visible
-    await waitFor(() => {
-      const cancelButton = document.querySelector(".btn-cancel-stream");
-      expect(cancelButton).not.toBeInTheDocument();
-    });
-  });
-
-  it("calls remoteAgent.abort() when cancel button is clicked", async () => {
-    const abortMock = vi.fn();
-    vi.mocked(useAgentModule.useAgent).mockReturnValue({
-      status: "connected",
-      remoteAgent: { abort: abortMock } as any,
-      historyTruncated: false,
-      sendMessage: vi.fn(),
-      isLoadingHistory: false,
-      hasMoreHistory: true,
-      loadOlderMessages: vi.fn(),
-      isAgentStreaming: true,
-    });
-
-    render(<App />);
-
-    // Select a node
-    const nodeCardButton = screen.getByText("localhost:9000").closest("button");
-    fireEvent.click(nodeCardButton!);
-
-    // Wait for cancel button and click it
-    await waitFor(() => {
-      const cancelButton = document.querySelector(".btn-cancel-stream") as HTMLButtonElement;
-      expect(cancelButton).toBeInTheDocument();
-      fireEvent.click(cancelButton);
-    });
-
-    // Verify abort was called
-    expect(abortMock).toHaveBeenCalledTimes(1);
-  });
-
-  it("preserves stage header layout with cancel button", async () => {
-    vi.mocked(useAgentModule.useAgent).mockReturnValue({
-      status: "connected",
-      remoteAgent: { abort: vi.fn() } as any,
-      historyTruncated: false,
-      sendMessage: vi.fn(),
-      isLoadingHistory: false,
-      hasMoreHistory: true,
-      loadOlderMessages: vi.fn(),
-      isAgentStreaming: true,
-    });
-
-    render(<App />);
-
-    // Select a node
-    const nodeCardButton = screen.getByText("localhost:9000").closest("button");
-    fireEvent.click(nodeCardButton!);
-
-    // Verify all header elements are present
     await waitFor(() => {
       const stageHeader = document.querySelector(".stage-header");
-      expect(stageHeader?.querySelector(".back-button")).toBeInTheDocument();
-      expect(stageHeader?.querySelector(".header-info")).toBeInTheDocument();
       expect(stageHeader?.querySelector(".status-dot")).toBeInTheDocument();
-      expect(stageHeader?.querySelector(".btn-cancel-stream")).toBeInTheDocument();
+      // Cancel button is now in MessageEditor, not in the stage header
+      expect(stageHeader?.querySelector(".btn-cancel-stream")).not.toBeInTheDocument();
     });
   });
 });
