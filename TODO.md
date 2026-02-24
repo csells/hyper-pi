@@ -2,9 +2,18 @@
 
 ## End-to-End
 
-- [ ] autocomplete for commands/skills when the user presses "/"
-- [ ] autocomplete for at-file references (`@`)
-- [ ] attach files (check the tmux-adapter implementation)
+- [ ] abort/cancel: `RemoteAgent.abort()` is a no-op — the cancel button in the
+      stage header renders but does nothing. Needs a new `abort` WebSocket
+      message type in the protocol, a pi-socket handler that calls
+      `pi.abort()`, and `RemoteAgent.abort()` sending it over WebSocket.
+- [ ] autocomplete for commands/skills when the user presses "/" — needs a new
+      `list_commands` message type in the protocol so pi-socket can return
+      available `/` commands and skills
+- [ ] autocomplete for at-file references (`@`) — needs a new `list_files`
+      message type in the protocol so pi-socket can return file listings
+      relative to the agent's cwd
+- [ ] attach files (check the tmux-adapter implementation) — needs a new
+      `attach_file` message type or binary frame support in the protocol
 
 ## mobile
 
@@ -32,7 +41,9 @@
 - [x] check that Spawn works
 - [x] why does the tool output look SO different from the tui UI?
 - [x] theming: 7 themes (dark, light, gruvbox-dark, tokyo-night, nord, solarized-dark, solarized-light) with full pi color token mapping to CSS custom properties
-- [x] need a cancel button AND a submit button during streaming responses
+- [~] need a cancel button AND a submit button during streaming responses
+      (submit works; cancel button renders but `abort()` is a no-op — see
+      End-to-End section)
 - [x] show the name of the session as well as the project
   - [x] make it easy to name the session
 - [x] what are the greyed out agents for? why do I want to click on dead agents
