@@ -1,11 +1,14 @@
 {
   "id": "task-4",
   "title": "Add list_files protocol type and pi-socket handler for @ autocomplete",
-  "status": "todo",
+  "status": "in_progress",
   "depends_on": [
     "task-1"
   ],
   "created_at": "2026-02-24T07:26:43.601Z",
-  "updated_at": "2026-02-24T07:26:43.601Z",
-  "attempt_count": 0
+  "updated_at": "2026-02-24T07:27:42.210Z",
+  "attempt_count": 1,
+  "started_at": "2026-02-24T07:27:42.189Z",
+  "base_commit": "f150d6a8f744a393e3cacba051cb4fb9acb5bddc",
+  "assigned_to": "GoldQuartz"
 }

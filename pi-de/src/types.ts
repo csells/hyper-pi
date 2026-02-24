@@ -21,3 +21,35 @@ export type {
 export interface AbortRequest {
   type: "abort";
 }
+
+// Autocomplete: Command and File Lists
+export interface CommandInfo {
+  name: string;
+  description: string;
+}
+
+export interface FileInfo {
+  name: string;
+  isDirectory: boolean;
+  path: string;
+}
+
+export interface ListCommandsRequest {
+  type: "list_commands";
+}
+
+export interface CommandsListResponse {
+  type: "commands_list";
+  commands: CommandInfo[];
+}
+
+export interface ListFilesRequest {
+  type: "list_files";
+  prefix?: string;
+}
+
+export interface FilesListResponse {
+  type: "files_list";
+  files: FileInfo[];
+  cwd: string;
+}

@@ -23,7 +23,7 @@ import type {
   TextContent,
   UserMessage,
 } from "@mariozechner/pi-ai";
-import type { InitStateEvent, SocketEvent, Tool, HistoryPageResponse } from "./types";
+import type { InitStateEvent, SocketEvent, Tool, HistoryPageResponse, CommandInfo, FileInfo } from "./types";
 
 /** Minimal Model stub for display purposes (remote agent owns the real model). */
 const REMOTE_MODEL = {
@@ -55,6 +55,8 @@ export class RemoteAgent {
   onInitState: ((event: InitStateEvent) => void) | null = null;
   onHistoryPage: ((page: HistoryPageResponse) => void) | null = null;
   onError: ((error: string) => void) | null = null;
+  onCommandsList: ((commands: CommandInfo[]) => void) | null = null;
+  onFilesList: ((files: FileInfo[], cwd: string) => void) | null = null;
 
   // Required by AgentInterface (prevents it from overriding with proxy/key defaults)
   streamFn: unknown = () => {};
@@ -167,6 +169,23 @@ export class RemoteAgent {
     this.ws.send(JSON.stringify({ type: "abort" }));
   }
 
+  /**
+   * Request a list of available commands for / autocomplete.
+   */
+  listCommands(): void {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    this.ws.send(JSON.stringify({ type: "list_commands" }));
+  }
+
+  /**
+   * Request a list of files matching the given prefix for @ autocomplete.
+   * If prefix is not provided, returns files in the current directory.
+   */
+  listFiles(prefix?: string): void {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    this.ws.send(JSON.stringify({ type: "list_files", prefix }));
+  }
+
   setModel(_m: Model<Api>): void {
     // No-op: remote agent owns its model
   }
@@ -208,6 +227,24 @@ export class RemoteAgent {
         this.onHistoryPage(page);
       }
       this.emit({ type: "agent_end", messages: this._state.messages });
+      return;
+    }
+
+    // Handle commands_list response for / autocomplete
+    if (socketEvent.type === "commands_list") {
+      const event = socketEvent as any;
+      if (this.onCommandsList && event.commands) {
+        this.onCommandsList(event.commands);
+      }
+      return;
+    }
+
+    // Handle files_list response for @ autocomplete
+    if (socketEvent.type === "files_list") {
+      const event = socketEvent as any;
+      if (this.onFilesList && event.files && event.cwd) {
+        this.onFilesList(event.files, event.cwd);
+      }
       return;
     }
 

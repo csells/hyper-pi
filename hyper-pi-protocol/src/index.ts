@@ -46,6 +46,58 @@ export interface AbortRequest {
 }
 
 /**
+ * Client request to list available / commands and skills.
+ * Sent as JSON over WebSocket; server responds with CommandsListResponse.
+ */
+export interface ListCommandsRequest {
+  type: "list_commands";
+}
+
+/**
+ * Server response with available / commands and skills.
+ * Sent in response to a ListCommandsRequest.
+ */
+export interface CommandsListResponse {
+  type: "commands_list";
+  commands: CommandInfo[];
+}
+
+/**
+ * Information about a single / command or skill.
+ */
+export interface CommandInfo {
+  name: string;        // e.g. "/help", "/reload", "/skill:harden"
+  description: string;
+}
+
+/**
+ * Client request to list files for @ autocomplete.
+ * Sent as JSON over WebSocket; server responds with FilesListResponse.
+ */
+export interface ListFilesRequest {
+  type: "list_files";
+  prefix?: string;  // partial path to filter/complete
+}
+
+/**
+ * File information for directory listing.
+ */
+export interface FileInfo {
+  path: string;        // relative to cwd
+  isDirectory: boolean;
+}
+
+/**
+ * Server response with file listings for @ autocomplete.
+ * Contains file info in the target directory (or cwd if no prefix).
+ */
+export interface FilesListResponse {
+  type: "files_list";
+  files: FileInfo[];
+  cwd: string;  // agent's working directory for context
+}
+
+/**
  * Server response to a fetch_history request.
  * Contains a slice of older messages ready to prepend to the conversation.
  */
@@ -60,7 +112,7 @@ export interface HistoryPageResponse {
  * Wire protocol from pi-socket: either init_state or a forwarded pi AgentEvent.
  * pi-socket forwards events as-is — no custom decomposition.
  */
-export type SocketEvent = InitStateEvent | AgentEvent | HistoryPageResponse;
+export type SocketEvent = InitStateEvent | AgentEvent | HistoryPageResponse | CommandsListResponse | FilesListResponse;
 
 // ── Hypivisor Registry Protocol ───────────────────────────────
 

@@ -547,4 +547,136 @@ describe("RemoteAgent", () => {
       expect(agent.oldestIndex).toBe(0); // Reset to default
     });
   });
+
+  describe("listCommands", () => {
+    it("sends list_commands JSON request over WebSocket", () => {
+      const { ws, sent } = createMockWebSocket();
+      agent.connect(ws);
+
+      agent.listCommands();
+
+      expect(sent).toHaveLength(1);
+      const request = JSON.parse(sent[0]);
+      expect(request).toEqual({ type: "list_commands" });
+    });
+
+    it("does nothing if WebSocket is not connected", () => {
+      const { sent } = createMockWebSocket();
+      // Don't connect the agent
+
+      agent.listCommands();
+
+      expect(sent).toHaveLength(0);
+    });
+
+    it("calls onCommandsList callback if set", () => {
+      const { ws, receive } = createMockWebSocket();
+      agent.connect(ws);
+
+      const commandsLists: any[] = [];
+      agent.onCommandsList = (commands) => commandsLists.push(commands);
+
+      receive({
+        type: "commands_list",
+        commands: [
+          { name: "bash", description: "Run shell commands" },
+          { name: "ls", description: "List files" },
+        ],
+      });
+
+      expect(commandsLists).toHaveLength(1);
+      expect(commandsLists[0]).toEqual([
+        { name: "bash", description: "Run shell commands" },
+        { name: "ls", description: "List files" },
+      ]);
+    });
+
+    it("does not call onCommandsList callback if not set", () => {
+      const { ws, receive } = createMockWebSocket();
+      agent.connect(ws);
+
+      // Don't set agent.onCommandsList
+
+      receive({
+        type: "commands_list",
+        commands: [{ name: "bash", description: "Run shell commands" }],
+      });
+
+      // Should not throw
+      expect(true).toBe(true);
+    });
+  });
+
+  describe("listFiles", () => {
+    it("sends list_files JSON request without prefix over WebSocket", () => {
+      const { ws, sent } = createMockWebSocket();
+      agent.connect(ws);
+
+      agent.listFiles();
+
+      expect(sent).toHaveLength(1);
+      const request = JSON.parse(sent[0]);
+      expect(request).toEqual({ type: "list_files", prefix: undefined });
+    });
+
+    it("sends list_files JSON request with prefix over WebSocket", () => {
+      const { ws, sent } = createMockWebSocket();
+      agent.connect(ws);
+
+      agent.listFiles("src/");
+
+      expect(sent).toHaveLength(1);
+      const request = JSON.parse(sent[0]);
+      expect(request).toEqual({ type: "list_files", prefix: "src/" });
+    });
+
+    it("does nothing if WebSocket is not connected", () => {
+      const { sent } = createMockWebSocket();
+      // Don't connect the agent
+
+      agent.listFiles("src/");
+
+      expect(sent).toHaveLength(0);
+    });
+
+    it("calls onFilesList callback if set", () => {
+      const { ws, receive } = createMockWebSocket();
+      agent.connect(ws);
+
+      const filesLists: any[] = [];
+      agent.onFilesList = (files, cwd) => filesLists.push({ files, cwd });
+
+      receive({
+        type: "files_list",
+        files: [
+          { name: "App.tsx", isDirectory: false, path: "pi-de/src/App.tsx" },
+          { name: "components", isDirectory: true, path: "pi-de/src/components" },
+        ],
+        cwd: "/Users/test/hyper-pi",
+      });
+
+      expect(filesLists).toHaveLength(1);
+      expect(filesLists[0].files).toEqual([
+        { name: "App.tsx", isDirectory: false, path: "pi-de/src/App.tsx" },
+        { name: "components", isDirectory: true, path: "pi-de/src/components" },
+      ]);
+      expect(filesLists[0].cwd).toBe("/Users/test/hyper-pi");
+    });
+
+    it("does not call onFilesList callback if not set", () => {
+      const { ws, receive } = createMockWebSocket();
+      agent.connect(ws);
+
+      // Don't set agent.onFilesList
+
+      receive({
+        type: "files_list",
+        files: [{ name: "App.tsx", isDirectory: false, path: "pi-de/src/App.tsx" }],
+        cwd: "/Users/test/hyper-pi",
+      });
+
+      // Should not throw
+      expect(true).toBe(true);
+    });
+  });
 });
