@@ -116,6 +116,7 @@ export function patchSendDuringStreaming(el: HTMLElement): () => void {
     }
     // Restore AgentInterface.sendMessage
     if (patchedAgentInterface && originalSendMessage) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (patchedAgentInterface as any).sendMessage = originalSendMessage;
     }
     // Restore MessageEditor.isStreaming
@@ -123,6 +124,7 @@ export function patchSendDuringStreaming(el: HTMLElement): () => void {
       if (originalIsStreamingDescriptor) {
         Object.defineProperty(patchedMessageEditor, "isStreaming", originalIsStreamingDescriptor);
       } else {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         delete (patchedMessageEditor as any).isStreaming;
       }
     }

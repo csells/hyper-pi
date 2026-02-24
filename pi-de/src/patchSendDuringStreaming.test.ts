@@ -32,10 +32,12 @@ describe("patchSendDuringStreaming", () => {
     (agentInterface as any).sendMessage = vi.fn(async function (this: any) {
       // Original would gate here: if (this.session?.state.isStreaming) return;
       // So our patch should allow this
-      if (!this.session) return;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      if (!(this as any).session) return;
       const text = textarea.value.trim();
       if (!text) return;
-      await this.session.prompt(text);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (this as any).session.prompt(text);
       textarea.value = "";
       textarea.focus();
     });
@@ -54,8 +56,10 @@ describe("patchSendDuringStreaming", () => {
     });
 
     it("patches AgentInterface.sendMessage", () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const originalSendMessage = (agentInterface as any).sendMessage;
       const cleanup = patchSendDuringStreaming(agentInterface);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const patchedSendMessage = (agentInterface as any).sendMessage;
 
       // Should be a different function
@@ -68,21 +72,27 @@ describe("patchSendDuringStreaming", () => {
       const cleanup = patchSendDuringStreaming(agentInterface);
 
       // Set isStreaming to true
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (messageEditor as any).isStreaming = true;
       // Should still return false
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       expect((messageEditor as any).isStreaming).toBe(false);
 
       // Set to false
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (messageEditor as any).isStreaming = false;
       // Should still return false
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       expect((messageEditor as any).isStreaming).toBe(false);
 
       cleanup();
     });
 
     it("cleanup restores original behavior", () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const originalSendMessage = (agentInterface as any).sendMessage;
       const cleanup = patchSendDuringStreaming(agentInterface);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const patchedSendMessage = (agentInterface as any).sendMessage;
 
       // Verify it was patched
@@ -92,6 +102,7 @@ describe("patchSendDuringStreaming", () => {
 
       // After cleanup, should be a function (restored or original)
       // Note: might not be exact same object due to .bind() in implementation
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       expect(typeof (agentInterface as any).sendMessage).toBe("function");
     });
   });
@@ -100,10 +111,15 @@ describe("patchSendDuringStreaming", () => {
     it("always returns false regardless of assignment attempts", () => {
       const cleanup = patchSendDuringStreaming(agentInterface);
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       expect((messageEditor as any).isStreaming).toBe(false);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (messageEditor as any).isStreaming = true;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       expect((messageEditor as any).isStreaming).toBe(false);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (messageEditor as any).isStreaming = false;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       expect((messageEditor as any).isStreaming).toBe(false);
 
       cleanup();
@@ -113,7 +129,9 @@ describe("patchSendDuringStreaming", () => {
       const cleanup = patchSendDuringStreaming(agentInterface);
 
       expect(() => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (messageEditor as any).isStreaming = true;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (messageEditor as any).isStreaming = false;
       }).not.toThrow();
 
@@ -124,12 +142,14 @@ describe("patchSendDuringStreaming", () => {
       const cleanup = patchSendDuringStreaming(agentInterface);
 
       // Patched: always false
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       expect((messageEditor as any).isStreaming).toBe(false);
 
       cleanup();
 
       // After cleanup, cleanup doesn't throw
       expect(() => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const val = (messageEditor as any).isStreaming;
       }).not.toThrow();
     });
@@ -152,17 +172,21 @@ describe("patchSendDuringStreaming", () => {
       delayedContainer.appendChild(delayedAgentInterface);
 
       // Set up session and original sendMessage
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (delayedAgentInterface as any).session = {
         state: { isStreaming: true },
         prompt: vi.fn(),
       };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (delayedAgentInterface as any).sendMessage = vi.fn();
 
       // Give MutationObserver time to fire
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       // Check that patches were applied
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       expect((delayedMessageEditor as any).isStreaming).toBe(false);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       expect(typeof (delayedAgentInterface as any).sendMessage).toBe("function");
 
       cleanup();
@@ -172,7 +196,9 @@ describe("patchSendDuringStreaming", () => {
       const cleanup = patchSendDuringStreaming(agentInterface);
 
       // Elements were present at init time, should be patched
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       expect((messageEditor as any).isStreaming).toBe(false);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       expect(typeof (agentInterface as any).sendMessage).toBe("function");
 
       cleanup();
@@ -191,6 +217,7 @@ describe("patchSendDuringStreaming", () => {
       delayedAgentInterface.appendChild(delayedMessageEditor);
       delayedContainer.appendChild(delayedAgentInterface);
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (delayedAgentInterface as any).sendMessage = vi.fn();
 
       // Give MutationObserver time to fire
@@ -208,6 +235,7 @@ describe("patchSendDuringStreaming", () => {
       const cleanup = patchSendDuringStreaming(agentInterface);
 
       // Simulate handleKeyDown logic that checks isStreaming
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const wouldAllowSend = !(messageEditor as any).isStreaming;
 
       // Should allow sending since isStreaming is false
