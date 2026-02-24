@@ -65,6 +65,18 @@ During a tool-using turn, events arrive in this order:
 - **From Pi-DE:** Sent via `RemoteAgent.prompt()` → WebSocket → pi-socket → `pi.sendUserMessage()`. Input stays active during streaming.
 - **From TUI:** pi emits `message_start` with `role: "user"`. pi-socket includes `content` in the event. `RemoteAgent` adds user message to state.
 
+### Error logging
+
+Pi-DE is a browser app and cannot write to the server-side JSONL log. Errors go
+to `console.error`; warnings go to `console.warn`. Use
+`surf --tab-id <ID> console --level error` to check for runtime errors.
+
+- **`console.error`**: Malformed WebSocket messages (`JSON.parse` failure in
+  `RemoteAgent` or `useHypivisor`) — receiving non-JSON from our own server is a
+  bug in pi-socket or hypivisor.
+- **`console.warn`**: Disconnects, reconnects, dropped prompts — expected
+  degradation.
+
 ### Vite configuration
 
 Only Node-only packages are excluded from pre-bundling (`@aws-sdk/*`, `@smithy/*`, `socks`). Everything else (pi-web-ui, mini-lit, highlight.js, etc.) pre-bundles normally, following pi-web-ui's own example app pattern.

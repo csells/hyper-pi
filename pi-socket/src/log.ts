@@ -20,7 +20,7 @@ import os from "node:os";
 import path from "node:path";
 
 const LOG_DIR = path.join(os.homedir(), ".pi", "logs");
-const LOG_FILE = path.join(LOG_DIR, "pi-socket.jsonl");
+const LOG_FILE = path.join(LOG_DIR, "hyper-pi.jsonl");
 
 /** Exported so the hardening skill knows where to look. */
 export const LOG_PATH = LOG_FILE;

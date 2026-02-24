@@ -2,6 +2,7 @@ pub mod auth;
 pub mod cleanup;
 pub mod fs_browser;
 pub mod handlers;
+pub mod log;
 pub mod rpc;
 pub mod spawn;
 pub mod state;
@@ -22,7 +23,7 @@ use std::{
     sync::{Arc, Mutex, RwLock},
     time::Duration,
 };
-use tracing::{error, warn};
+use tracing::{error, info, warn};
 
 #[cfg(test)]
 mod tests {
@@ -122,7 +123,9 @@ pub fn serve(listener: TcpListener, state: Registry) {
         let stream = match incoming {
             Ok(s) => s,
             Err(e) => {
+                let msg = format!("TCP accept failed: {e}");
                 error!(error = %e, "Accept failed");
+                log::error("tcp.accept", &msg);
                 continue;
             }
         };
@@ -222,7 +225,10 @@ fn upgrade_websocket(
     };
 
     let response_bytes = accept_response.response_bytes();
-    if stream.write_all(&response_bytes).is_err() {
+    if let Err(e) = stream.write_all(&response_bytes) {
+        let msg = format!("Failed to send WebSocket upgrade response to {peer_addr}: {e}");
+        warn!(peer = %peer_addr, error = %e, "Failed to send WebSocket upgrade response");
+        log::warn("ws.upgrade", &msg);
         return None;
     }
 
@@ -348,7 +354,10 @@ fn handle_registry_ws(stream: StdTcpStream, peer_addr: std::net::SocketAddr, sta
             .collect();
         let init = handlers::build_init_event(&nodes);
         let mut w = writer.lock().unwrap();
-        if w.send_text(&init).is_err() {
+        if let Err(e) = w.send_text(&init) {
+            let msg = format!("Failed to send init event to {peer_addr}: {e}");
+            warn!(peer = %peer_addr, error = %e, "Failed to send init event");
+            log::warn("registry.init", &msg);
             return;
         }
     }
@@ -497,7 +506,10 @@ fn handle_proxy_ws(
         use io::{Read, Write};
         let key = handlers::base64_ws_key();
         let req = handlers::build_agent_handshake_request(&agent_addr, &key);
-        if agent_stream.write_all(req.as_bytes()).is_err() {
+        if let Err(e) = agent_stream.write_all(req.as_bytes()) {
+            let msg = format!("Failed to send agent handshake request for {node_id}: {e}");
+            warn!(node_id, error = %e, "Failed to send agent handshake request");
+            log::warn("proxy.handshake", &msg);
             return;
         }
         let mut resp_buf = [0u8; 1024];
@@ -548,9 +560,9 @@ fn handle_proxy_ws(
 
     let dash_writer_for_agent = dashboard_writer.clone();
     let agent_writer_for_agent = agent_writer.clone();
-    let peer = peer_addr;
 
     // Thread: agent → dashboard
+    let node_id_owned = node_id.to_string();
     let agent_to_dash = std::thread::spawn(move || {
         let mut codec = FrameCodec::client();
         let mut buf = asupersync::bytes::BytesMut::with_capacity(8192);
@@ -558,13 +570,19 @@ fn handle_proxy_ws(
             match ws_read(&mut agent_stream, &mut codec, &mut buf) {
                 Ok(Some(ReadResult::Text(text))) => {
                     let mut w = dash_writer_for_agent.lock().unwrap();
-                    if w.send_text(&text).is_err() {
+                    if let Err(e) = w.send_text(&text) {
+                        let msg = format!("Proxy relay: failed to forward agent text to dashboard for {node_id_owned}: {e}");
+                        warn!(node_id = %node_id_owned, error = %e, "Proxy relay: failed to forward agent text to dashboard");
+                        log::warn("proxy.relay.agent_to_dash", &msg);
                         break;
                     }
                 }
                 Ok(Some(ReadResult::Binary(data))) => {
                     let mut w = dash_writer_for_agent.lock().unwrap();
-                    if w.send_raw_bytes(&data).is_err() {
+                    if let Err(e) = w.send_raw_bytes(&data) {
+                        let msg = format!("Proxy relay: failed to forward agent binary to dashboard for {node_id_owned}: {e}");
+                        warn!(node_id = %node_id_owned, error = %e, "Proxy relay: failed to forward agent binary to dashboard");
+                        log::warn("proxy.relay.agent_to_dash", &msg);
                         break;
                     }
                 }
@@ -581,6 +599,9 @@ fn handle_proxy_ws(
                     {
                         continue;
                     }
+                    let msg = format!("Proxy relay: agent read error for {node_id_owned}: {e}");
+                    warn!(node_id = %node_id_owned, error = %e, "Proxy relay: agent read error");
+                    log::warn("proxy.relay.agent_read", &msg);
                     break;
                 }
             }
@@ -588,6 +609,7 @@ fn handle_proxy_ws(
     });
 
     // This thread: dashboard → agent
+    info!(peer = %peer_addr, node_id, "Proxy relay started");
     let mut codec = FrameCodec::server();
     let mut buf = asupersync::bytes::BytesMut::with_capacity(8192);
     loop {
@@ -598,9 +620,22 @@ fn handle_proxy_ws(
                 let mut client_codec = FrameCodec::client();
                 let frame = Frame::from(Message::text(&text));
                 let mut out = asupersync::bytes::BytesMut::with_capacity(text.len() + 14);
-                if client_codec.encode(frame, &mut out).is_ok() {
-                    let mut w = agent_writer.lock().unwrap();
-                    let _ = w.send_raw_bytes(&out);
+                match client_codec.encode(frame, &mut out) {
+                    Ok(()) => {
+                        let mut w = agent_writer.lock().unwrap();
+                        if let Err(e) = w.send_raw_bytes(&out) {
+                            let msg = format!("Proxy relay: failed to forward dashboard text to agent {node_id}: {e}");
+                            warn!(node_id, error = %e, "Proxy relay: failed to forward dashboard text to agent");
+                            log::warn("proxy.relay.dash_to_agent", &msg);
+                            break;
+                        }
+                    }
+                    Err(e) => {
+                        let msg = format!("Proxy relay: failed to encode dashboard frame for agent {node_id}: {e}");
+                        warn!(node_id, error = %e, "Proxy relay: failed to encode dashboard frame for agent");
+                        log::error("proxy.encode", &msg);
+                        break;
+                    }
                 }
             }
             Ok(Some(ReadResult::Ping(payload))) => {
@@ -615,11 +650,14 @@ fn handle_proxy_ws(
                 if e.kind() == io::ErrorKind::WouldBlock || e.kind() == io::ErrorKind::TimedOut {
                     continue;
                 }
-                warn!(peer = %peer, error = %e, "Proxy read error");
+                let msg = format!("Proxy relay: dashboard read error for {node_id} from {peer_addr}: {e}");
+                warn!(peer = %peer_addr, node_id, error = %e, "Proxy relay: dashboard read error");
+                log::warn("proxy.relay.dash_read", &msg);
                 break;
             }
         }
     }
+    info!(peer = %peer_addr, node_id, "Proxy relay ended");
 
     use std::net::Shutdown;
     let _ = agent_shutdown_handle.shutdown(Shutdown::Both);

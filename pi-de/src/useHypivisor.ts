@@ -71,7 +71,13 @@ export function useHypivisor(port: number, token: string): UseHypivisorReturn {
       ws.onopen = () => setStatus("connected");
 
       ws.onmessage = (event) => {
-        const data = JSON.parse(event.data) as HypivisorEvent | RpcResponse;
+        let data: HypivisorEvent | RpcResponse;
+        try {
+          data = JSON.parse(event.data) as HypivisorEvent | RpcResponse;
+        } catch (e) {
+          console.error("[useHypivisor] Failed to parse WebSocket message:", e);
+          return;
+        }
 
         // Push event (check first, before checking for RPC response)
         // because node_offline and node_removed also have an 'id' field
@@ -91,6 +97,7 @@ export function useHypivisor(port: number, token: string): UseHypivisorReturn {
         setStatus("disconnected");
         rejectAllPending("WebSocket disconnected");
         if (!disposed) {
+          console.warn("[useHypivisor] Disconnected from hypivisor, reconnecting in 5s");
           reconnectTimer = setTimeout(connect, 5000);
         }
       };

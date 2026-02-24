@@ -9,7 +9,7 @@ cargo build            # Debug build
 cargo build --release  # Release build
 cargo run              # Run (default port 31415)
 cargo run -- -p 9000   # Custom port
-cargo test             # Run all tests (89 unit + 18 integration)
+cargo test             # Run all tests (91 unit + 18 integration)
 cargo clippy           # Lint
 cargo tarpaulin --exclude-files src/main.rs --out stdout  # Coverage (81%)
 ```
@@ -33,7 +33,29 @@ The server code lives in `lib.rs` (library crate) so integration tests can start
 | `src/auth.rs` | Token-based authentication |
 | `src/fs_browser.rs` | Directory listing for spawn UI |
 | `src/spawn.rs` | Agent process spawning with path validation |
+| `src/log.rs` | Structured JSONL logger (writes to `~/.pi/logs/hyper-pi.jsonl`, shared with pi-socket) |
 | `src/cleanup.rs` | Stale node removal (offline TTL + active ghost detection) |
+
+## Logging
+
+Hypivisor uses two logging outputs:
+
+- **stderr** via `tracing` (`RUST_LOG=hypivisor=info`) — real-time operational visibility
+- **JSONL** via `src/log.rs` to `~/.pi/logs/hyper-pi.jsonl` — persistent structured log shared with pi-socket, processable by the harden skill
+
+The JSONL logger mirrors pi-socket's format: each line has `ts`, `level`,
+`component` (`"hypivisor"`), and `msg` fields. Error entries include
+`needsHardening: true` and a `boundary` field identifying the failure site.
+
+Error-level events: TCP accept failure, WebSocket frame encode failure.
+Warn-level events: proxy relay failures, handshake/init send failures, read errors.
+
+```rust
+use crate::log;
+log::info("hypivisor", "startup message");
+log::warn("proxy.relay", "forward failed: connection reset");
+log::error("proxy.encode", "failed to encode frame: invalid payload");
+```
 
 ## Test files
 
@@ -45,6 +67,7 @@ The server code lives in `lib.rs` (library crate) so integration tests can start
 | `src/cleanup.rs` (inline) | 6 | Offline TTL, active ghost detection, reactivation |
 | `src/fs_browser.rs` (inline) | 8 | Directory listing, hidden entries, symlink safety, sorting |
 | `src/spawn.rs` (inline) | 9 | Path validation, new folder creation, traversal protection |
+| `src/log.rs` (inline) | 2 | JSONL entry format, `needsHardening` flag on errors |
 | `src/lib.rs` (inline) | 4 | `create_state`, `bind`, `ephemeral_cx` |
 | `tests/server_integration.rs` | 18 | In-process server: WS connect, init events, register/deregister, broadcasts, auth (401), routing (404/400), proxy errors (offline/missing/unreachable), node offline on disconnect, relay through mock echo agent |
 

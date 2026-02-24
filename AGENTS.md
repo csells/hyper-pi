@@ -89,7 +89,7 @@ Tests are measured with actual coverage tools (`cargo tarpaulin` for Rust,
 
 | Component         | Tests                          | Line Coverage              |
 | ----------------- | ------------------------------ | -------------------------- |
-| hypivisor         | 107 (89 unit + 18 integration) | **81%**                    |
+| hypivisor         | 109 (91 unit + 18 integration) | **81%**                    |
 | pi-socket         | 44                             | 73%                        |
 | Pi-DE             | 59                             | **89%**                    |
 | integration-tests | 51                             | (exercises all components) |
@@ -106,38 +106,63 @@ sessions and test the full WebSocket stack end-to-end. Key test infrastructure:
 - macOS `/var` → `/private/var` symlink resolved via `realpathSync` in
   `createTempCwd()`
 
-## Self-Hardening Architecture
+## Unified Logging & Hardening
 
-pi-socket runs inside pi's Node.js process. An unhandled exception in the
-extension kills the host pi agent. To prevent this while maintaining visibility
-into bugs, pi-socket uses a **two-layer error architecture**.
+All server-side components write to a single structured log:
 
-### Two-layer error handling
+`~/.pi/logs/hyper-pi.jsonl`
 
-- **Inner layer**: Known errors handled at their source with specific logic —
-  `safeSerialize()` for non-serializable data, `readyState` guards before
-  `ws.send()`, `hypivisorUrlValid` flag for bad URLs, defensive property access
-  in `buildInitState()`.
-- **Outer layer**: `boundary()` wrapper on every Node event-loop callback
-  (`wss.on`, `ws.on`, `setTimeout`). Catches unanticipated errors, logs them
-  with `needsHardening: true`, and never throws.
+Each entry is a JSON object with `ts`, `level`, `component`, and `msg` fields.
+The `component` field distinguishes the source (`pi-socket`, `hypivisor`).
+Pi-DE is a browser app and logs to `console.error`/`console.warn` instead.
 
-Note: `pi.on()` handlers do NOT need wrapping — pi's `ExtensionRunner.emit()`
-already catches errors from extension handlers.
+### Log levels
 
-### Operational log
+| Level | Meaning | `needsHardening` |
+|-------|---------|-------------------|
+| `error` | Bugs or unexpected failures — code needs fixing | `true` |
+| `warn` | Expected degraded conditions — reconnecting, client dropped | no |
+| `info` | Normal operations — startup, connections, registrations | no |
 
-`~/.pi/logs/pi-socket.jsonl` — structured JSONL with every significant event:
+**Error-level events** (these are bugs, not expected degradation):
 
-- `info`: startup, connections, registrations
-- `warn`: expected degraded conditions (reconnecting, client dropped)
-- `error` + `needsHardening: true`: unanticipated errors caught by `boundary()`
+- WSS server error (pi-socket)
+- TCP accept failure (hypivisor)
+- WebSocket frame encode failure (hypivisor proxy)
+- Any unanticipated exception caught by `boundary()` (pi-socket)
+
+**Warn-level events** (expected, not bugs):
+
+- Client WebSocket disconnect/error
+- Hypivisor connection failure (hypivisor may not be running)
+- Proxy relay forward failure (agent/dashboard disconnected)
+- Handshake or init send failure (timing-related)
 
 ### Hardening
 
-Use the global `harden` skill (`/skill:harden ~/.pi/logs/pi-socket.jsonl`) to
-process runtime errors. It reads the log, finds new errors, writes tests, fixes
-code, and tracks fixes in `.harden/ledger.md`.
+Use the global `harden` skill to process runtime errors from all server-side
+components:
+
+```
+/skill:harden ~/.pi/logs/hyper-pi.jsonl
+```
+
+It reads the log, finds new `error`-level entries with `needsHardening: true`,
+writes tests, fixes code, and tracks fixes in `.harden/ledger.md`.
+
+### pi-socket two-layer error handling
+
+pi-socket runs inside pi's Node.js process. An unhandled exception kills the
+host pi agent. Two layers prevent this:
+
+- **Inner layer**: Known errors handled at their source — `safeSerialize()`,
+  `readyState` guards, `hypivisorUrlValid` flag, defensive `buildInitState()`.
+- **Outer layer**: `boundary()` wrapper on every Node event-loop callback
+  (`wss.on`, `ws.on`, `setTimeout`). Catches unanticipated errors, logs them
+  as `error` with `needsHardening: true`, and never throws.
+
+Note: `pi.on()` handlers do NOT need wrapping — pi's `ExtensionRunner.emit()`
+already catches errors from extension handlers.
 
 ## Browser Testing with Surf
 

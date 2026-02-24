@@ -40,6 +40,7 @@ fn main() {
 
     let listener = hypivisor::bind(config.port);
     info!(port = config.port, "Hypivisor online");
+    hypivisor::log::info("hypivisor", &format!("Hypivisor online on port {}", config.port));
 
     hypivisor::serve(listener, state);
 }

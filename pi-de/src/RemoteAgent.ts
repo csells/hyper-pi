@@ -95,7 +95,13 @@ export class RemoteAgent {
     
     this.ws = ws;
     this.messageHandler = (event: MessageEvent) => {
-      const data = JSON.parse(event.data as string) as SocketEvent;
+      let data: SocketEvent;
+      try {
+        data = JSON.parse(event.data as string) as SocketEvent;
+      } catch (e) {
+        console.error("[RemoteAgent] Failed to parse WebSocket message:", e);
+        return;
+      }
       this.handleSocketEvent(data);
     };
     ws.addEventListener("message", this.messageHandler);
@@ -126,7 +132,10 @@ export class RemoteAgent {
   // ── Agent API surface used by AgentInterface ──────────────────
 
   async prompt(message: AgentMessage | string): Promise<void> {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      console.warn("[RemoteAgent] Cannot send message: WebSocket is not connected");
+      return;
+    }
     const text = typeof message === "string" ? message : (message as UserMessage).content;
     if (typeof text === "string") {
       this.ws.send(text);

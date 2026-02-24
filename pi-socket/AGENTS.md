@@ -28,7 +28,7 @@ Use `/reload` in the pi TUI to pick up changes after rebuilding.
 | File | Purpose |
 |------|---------|
 | `src/index.ts` | Extension entry point, event handlers, hypivisor connection |
-| `src/log.ts` | Structured JSONL logger (writes to `~/.pi/logs/pi-socket.jsonl`) |
+| `src/log.ts` | Structured JSONL logger (writes to `~/.pi/logs/hyper-pi.jsonl`) |
 | `src/safety.ts` | `boundary()` wrapper — outer-layer safety net for Node callbacks |
 | `src/history.ts` | Converts pi session data into `init_state` payload |
 | `src/types.ts` | Shared type definitions for all socket events |
@@ -60,17 +60,21 @@ pi-socket runs inside pi's Node.js process. An uncaught exception kills pi.
 **Node event-loop callbacks** (wss.on, ws.on, setTimeout): Wrapped with `boundary()` from `safety.ts`. Two layers:
 
 1. **Inner layer**: Handle known errors at source — `safeSerialize()`, `readyState` guards, `hypivisorUrlValid` flag, defensive property access in `buildInitState()`.
-2. **Outer layer**: `boundary()` catches everything else and logs it as `needsHardening: true` to the operational log.
+2. **Outer layer**: `boundary()` catches everything else and logs it as `error` with `needsHardening: true` to the operational log.
 
-Run `/skill:harden-pi-socket` to process new errors and propose inner-layer fixes.
+**WebSocket error handlers** (`ws.on("error")`, `wss.on("error")`): Log the error
+details — never leave empty. WSS server errors are `error` level (infrastructure
+failure); client/hypivisor connection errors are `warn` level (expected degradation).
 
 ## Logging
 
-All operational events go to `~/.pi/logs/pi-socket.jsonl` as structured JSONL. Never use `console.log`/`console.error` — those go to pi's TUI.
+All operational events go to `~/.pi/logs/hyper-pi.jsonl` as structured JSONL
+(shared with hypivisor — see root `AGENTS.md` for level definitions). Never use
+`console.log`/`console.error` — those go to pi's TUI.
 
 ```typescript
 import * as log from "./log.js";
 log.info("pi-socket", "client connected", { clientCount: 3 });
 log.warn("hypivisor", "disconnected, will reconnect", { reconnectMs: 5000 });
-log.error("wss.connection", err);  // sets needsHardening: true
+log.error("wss.error", err);  // level: "error", needsHardening: true
 ```

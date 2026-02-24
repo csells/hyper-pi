@@ -121,10 +121,14 @@ export default function piSocket(pi: ExtensionAPI) {
         log.info("pi-socket", "client disconnected");
       });
 
-      ws.on("error", () => {});
+      ws.on("error", (err) => {
+        log.warn("pi-socket", "client WebSocket error", { error: String(err) });
+      });
     }));
 
-    wss.on("error", () => {});
+    wss.on("error", (err) => {
+      log.error("wss.error", err);
+    });
     connectToHypivisor(port);
   });
 
@@ -262,11 +266,15 @@ export default function piSocket(pi: ExtensionAPI) {
       hypivisorConnected = false;
       if (wasConnected) {
         log.warn("hypivisor", "disconnected, will reconnect");
+      } else {
+        log.warn("hypivisor", "connection attempt failed, will retry");
       }
       scheduleReconnect(port);
     });
 
-    ws.on("error", () => {});
+    ws.on("error", (err) => {
+      log.warn("hypivisor", "connection error", { error: String(err) });
+    });
   }
 
   function scheduleReconnect(port: number): void {
