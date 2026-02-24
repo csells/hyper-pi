@@ -1,0 +1,15 @@
+
+> pi-de@0.1.0 dev
+> vite
+
+Port 5180 is in use, trying another one...
+
+  VITE v6.4.1  ready in 128 ms
+
+  ➜  Local:   http://localhost:5181/
+  ➜  Network: use --host to expose
+  ➜  press h + enter to show help
+8:03:08 PM [vite] (client) hmr update /src/App.tsx
+8:03:28 PM [vite] (client) hmr update /src/App.css
+8:04:44 PM [vite] (client) hmr update /src/App.tsx
+8:04:48 PM [vite] (client) hmr update /src/App.css

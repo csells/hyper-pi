@@ -208,8 +208,8 @@ export default function App() {
       {/* ── LEFT: Roster ─────────────────────────────────── */}
       <div className="sidebar roster-pane">
         <h2>Hyper-Pi Mesh</h2>
-        <button className="theme-toggle" onClick={cycleTheme} title="Toggle theme">
-          {theme === "dark" ? "🌙" : theme === "light" ? "☀️" : "🖥️"}
+        <button className="theme-toggle" onClick={cycleTheme} title="Toggle theme: dark → light → system">
+          {theme === "dark" ? "🌙 Dark" : theme === "light" ? "☀️ Light" : "🖥️ System"}
         </button>
 
         {hvStatus !== "connected" && (
@@ -296,6 +296,16 @@ export default function App() {
                 </div>
               </div>
               <span className={`status-dot ${isAgentStreaming ? "working" : "active"}`} />
+              {isAgentStreaming && (
+                <button
+                  className="btn-cancel-stream"
+                  onClick={() => agent.remoteAgent.abort()}
+                  title="Cancel stream"
+                  aria-label="Cancel streaming"
+                >
+                  ■
+                </button>
+              )}
               {agent.status !== "connected" && (
                 <span className="agent-status">
                   {agent.status === "connecting" && "Connecting…"}

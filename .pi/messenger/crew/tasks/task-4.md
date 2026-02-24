@@ -1,23 +1,29 @@
-# Roster grouping by project with PID display and working indicator
+# Spawn Verification (F4) and Tool Output Investigation (F5)
 
-Restructure the roster to group agents by project directory, display PID when available, and show a working/idle indicator on the selected agent's roster card.
+Manually verify that Spawn works end-to-end using surf browser testing, and investigate tool output differences between TUI and Pi-DE.
 
-**Files to modify:**
-- `pi-de/src/App.tsx` — Roster section (the `.node-list` div):
-  1. **Grouping (F1):** Add `useMemo` to group `nodes` by `projectName(node.cwd)` into a `Map<string, NodeInfo[]>`. Add `collapsedGroups` state (`Set<string>`) with toggle function. Render grouped: `[...groupedNodes.entries()].map(([project, projectNodes]) => <div className="project-group"><button className="project-header" onClick={toggleGroup}>...</button>{!collapsed && projectNodes.map(renderCard)}</div>)`.
-  2. **PID display (F7):** In node card metadata span, append: `{node.pid ? ` • PID: ${node.pid}` : ""}`. The `pid?: number` field is available from Task 1's protocol update.
-  3. **Working indicator in roster (F2 roster part):** On the selected agent's card, conditionally add `working` class to status dot: `<span className={`status-dot ${node.status} ${activeNode?.id === node.id && agent.isAgentStreaming ? 'working' : ''}`} />`. Uses `isAgentStreaming` from `useAgent` (added by Task 3).
-- `pi-de/src/App.css` — Add styles: `.project-group`, `.project-header` (transparent bg, flex layout, uppercase text), `.collapse-icon`, `.project-count` (badge with agent count). The `.status-dot.working` animation CSS is defined by Task 3.
-- `pi-de/src/App.test.tsx` — Update `makeNode` to optionally include `pid`. Add tests: grouping renders project headers, collapse/expand toggles, PID displays when present, working dot class applied to selected streaming agent.
+**Spawn Verification (F4)**:
+1. Start the hypivisor (in tmux): `cd hypivisor && cargo run`
+2. Start Pi-DE dev server (in tmux): `cd pi-de && npm run dev`
+3. Use `surf tab.new http://localhost:5173` to open Pi-DE
+4. Click "Spawn Agent", navigate to a directory, click "Deploy Agent Here"
+5. Verify the new agent appears in the roster
+6. Verify clicking the new agent shows the chat interface
+7. If bugs found, fix them and add tests
 
-**Acceptance criteria:**
-- Agents grouped by project name (last path segment of cwd)
-- Each group has collapsible header with project name and agent count
-- Groups default to expanded; clicking header toggles collapse
-- PID shows in node card metadata when present (e.g., 'localhost:8080 • PID: 12345')
-- PID absent gracefully when not available
-- Selected agent's card shows pulsing yellow dot during streaming
-- Non-selected agents keep static green/gray dots
-- All existing App.test.tsx tests pass
-- New tests pass: `cd pi-de && npm test`
-- Build succeeds: `cd pi-de && npm run build`
+**Tool Output Investigation (F5)**:
+1. Take a screenshot of Pi-DE showing a bash/tool call result using `surf screenshot`
+2. Compare visually with TUI tool output
+3. Document the differences in TODO.md
+4. If CSS-only fixes can improve visual parity, apply them to `App.css`
+5. Update `TODO.md` with findings and check off both items
+
+**Files to create/modify**:
+- Possibly `pi-de/src/App.css` — CSS adjustments for tool output if differences warrant changes
+- Update `TODO.md` — check off spawn and tool output items with notes
+
+**Acceptance criteria**:
+- Spawn verified working end-to-end OR bugs identified and fixed with tests
+- Tool output differences documented with screenshots or descriptions
+- Any CSS adjustments don't break existing styling or tests
+- `npm test && npm run build && npm run lint` all pass

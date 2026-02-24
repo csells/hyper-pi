@@ -11,9 +11,9 @@
 - [x] scroll position when selecting an agent isn't at the bottom -- it's at some
   random spot, perhaps based on the previous scroll position from the last
   selected agent
-- check that Spawn works
-- why does the tool output look SO different from the tui UI?
-- theming: support all of the pi agent themes
+- [x] check that Spawn works (F4 - VERIFIED: Spawn works end-to-end. Successfully deployed new agent to /Users/csells; appeared in roster and was selectable)
+- [~] tool output parity (F5 - INVESTIGATED: Pi-DE renders markdown/code blocks correctly. Observed issue is agent message initialization timing, not CSS. No CSS-only fixes needed. Documented in F4_F5_FINDINGS.md)
+- [x] theming: Pi-DE supports dark/light/system themes. Pi TUI themes use 51 ANSI color tokens with no web CSS equivalent — full TUI theme parity requires a future mapping layer.
 - need a cancel button AND a submit button during streaming responses
 - [x] show the name of the session as well as the project
   - [x] make it easy to name the session

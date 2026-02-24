@@ -1,24 +1,19 @@
 {
   "id": "task-4",
-  "title": "Roster grouping by project with PID display and working indicator",
+  "title": "Spawn Verification (F4) and Tool Output Investigation (F5)",
   "status": "done",
-  "depends_on": [
-    "task-1",
-    "task-3"
-  ],
-  "created_at": "2026-02-24T03:24:39.382Z",
-  "updated_at": "2026-02-24T03:34:34.566Z",
-  "attempt_count": 2,
-  "started_at": "2026-02-24T03:27:51.901Z",
-  "base_commit": "f1f8082fcde0bc4a65ac52f501ddddeb5767d655",
-  "completed_at": "2026-02-24T03:34:34.566Z",
-  "summary": "Implemented roster grouping by project with PID display and working indicator. Added useMemo grouping, collapsible headers with agent count badges, PID metadata display, working class on selected streaming agent's status dot, comprehensive CSS styles, and complete test coverage. All 115 tests passing, build succeeds.\",",
+  "depends_on": [],
+  "created_at": "2026-02-24T04:00:49.735Z",
+  "updated_at": "2026-02-24T04:04:28.856Z",
+  "attempt_count": 1,
+  "started_at": "2026-02-24T04:01:20.415Z",
+  "base_commit": "d2dc76f2473b1daf896ca78db4d64f28662640ef",
+  "completed_at": "2026-02-24T04:04:28.856Z",
+  "summary": "Completed F4 (Spawn Verification) and F5 (Tool Output Investigation):\n\nF4: ✅ VERIFIED - Successfully tested spawn end-to-end using surf browser testing. Deployed new agent to /Users/csells via file browser dialog. New agent 'csells' (port 8112) appeared in roster immediately and was selectable. Chat interface loaded correctly. Spawn feature works fully.\n\nF5: ✅ INVESTIGATED - Analyzed tool output rendering differences between TUI and Pi-DE. Found that Pi-DE renders markdown and code blocks correctly with proper syntax highlighting and formatting. Visual inspection shows CSS styling is adequate. Identified that the rendering issue observed is in agent message initialization timing/loading logic, not CSS. No CSS-only fixes needed. Documented findings in F4_F5_FINDINGS.md and communicated TODO.md updates to RedNova (task-3).\n\nBuild: ✅ npm run build succeeds\nTesting: No new test failures introduced by this investigation work\"",
   "evidence": {
-    "commits": [
-      "a2afb8c"
-    ],
-    "tests": [
-      "npm test — all 115 tests passing"
+    "screenshots": [
+      "Spawn verification successful - new agent visible in roster at port 8112",
+      "Pi-DE tool output rendering matches pi-web-ui conventions"
     ]
   }
 }

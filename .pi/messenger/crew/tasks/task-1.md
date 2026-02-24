@@ -1,20 +1,23 @@
-# PID field across protocol, pi-socket, and hypivisor
+# Patch Send-During-Streaming and MessageEditor isStreaming Override
 
-Add the system PID (`process.pid`) to the node registration flow across all three backend components so it flows through the wire protocol to Pi-DE.
+Create `pi-de/src/patchSendDuringStreaming.ts` that patches two things:
 
-**Files to modify:**
-- `hyper-pi-protocol/src/index.ts` — Add `pid?: number` to the `NodeInfo` interface (optional for backward compat)
-- `pi-socket/src/index.ts` — Add `pid: process.pid` to the `register` RPC params object inside `connectToHypivisor()` (~line 179)
-- `hypivisor/src/state.rs` — Add `pub pid: Option<u32>` to the `NodeInfo` struct with `#[serde(skip_serializing_if = "Option::is_none")]` (follows existing pattern for `offline_since` and `last_seen`)
-- Update `hypivisor/src/handlers.rs` test helper `make_node()` to include `pid: None`
+1. **`AgentInterface.sendMessage()`**: After the `<agent-interface>` element is available, override its `sendMessage` method to remove the `isStreaming` gate. The patched version should allow sending when `this.session?.state.isStreaming` is true, but still block empty messages and still call `this.session.prompt()`.
 
-**Exported symbols:**
-- `hyper-pi-protocol`: `NodeInfo.pid?: number` (TypeScript interface field)
-- `hypivisor/src/state.rs`: `NodeInfo.pid: Option<u32>` (Rust struct field)
+2. **`MessageEditor.isStreaming` property**: Override the `isStreaming` property on the `<message-editor>` element (found via `el.querySelector("message-editor")`) to always return `false`. This makes it always render the send button (not the stop button) and always allow Enter-to-send via its `handleKeyDown`.
 
-**Acceptance criteria:**
-- `cd hyper-pi-protocol && npm run build` succeeds
-- `cd pi-socket && npm run build && npm test` — all tests pass
-- `cd hypivisor && cargo test && cargo build` — all tests pass (update test helpers for `pid: None`)
-- PID field is optional: old pi-socket versions without PID still register without error
-- PID field serializes to JSON when present, omitted when None/undefined
+Use MutationObserver to find elements in light DOM (same pattern as `patchMobileKeyboard.ts`). Return a cleanup function.
+
+**Composition with mobile patch**: The `isStreaming=false` override on MessageEditor means `handleKeyDown` will allow Enter-to-send. On mobile, the existing `patchMobileKeyboard` fires first (capturing phase, registered before this patch) and calls `stopImmediatePropagation` for Enter — so Enter on mobile still inserts a newline. On desktop, `handleKeyDown` allows send. This composes correctly without additional logic.
+
+**Files to create/modify**:
+- Create `pi-de/src/patchSendDuringStreaming.ts` — exports `patchSendDuringStreaming(el: HTMLElement): () => void`
+- Create `pi-de/src/patchSendDuringStreaming.test.ts` — unit tests following `patchMobileKeyboard.test.ts` patterns
+- Modify `pi-de/src/App.tsx` — import and call `patchSendDuringStreaming(el)` in the `useEffect` that sets up `<agent-interface>`, alongside the existing `patchMobileKeyboard(el)` call. Compose cleanups.
+
+**Acceptance criteria**:
+- `patchSendDuringStreaming()` overrides `AgentInterface.sendMessage` to remove isStreaming gate
+- `patchSendDuringStreaming()` overrides `MessageEditor.isStreaming` to always be `false`
+- Tests verify: sendMessage works during streaming, empty messages still blocked, MessageEditor always shows send button, cleanup restores original behavior
+- `patchMobileKeyboard` still works correctly (Enter = newline on mobile)
+- `npm test && npm run build && npm run lint` all pass

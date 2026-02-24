@@ -1,29 +1,19 @@
-# Stage improvements — header, offline handling, scroll fix, and working indicator
+# Theme Toggle Label Update and F3 Completion
 
-Enhance the stage area with an informative header (F3), proper offline agent handling (F4), scroll-to-bottom on agent selection (F5), and a working/idle status indicator in the stage header (F2 stage part).
+Update the theme toggle in the sidebar to clearly display "Dark" / "Light" / "System" labels instead of just emoji icons. Mark F3 (theming) as addressed with documentation of the limitation.
 
-**Files to modify:**
-- `pi-de/src/useAgent.ts` — Add `isAgentStreaming: boolean` React state. Subscribe to `remoteAgent` events and update: `const [isAgentStreaming, setIsAgentStreaming] = useState(false);` with `useEffect(() => { const unsub = remoteAgent.subscribe(() => setIsAgentStreaming(remoteAgent.state.isStreaming)); return unsub; }, [remoteAgent]);`. Add to `UseAgentReturn` interface and return value.
-- `pi-de/src/useAgent.test.ts` — Add tests for `isAgentStreaming` state updates.
-- `pi-de/src/App.tsx` — Stage section changes (the `.main-stage` div):
-  1. **Session name (F3):** Add `sessionName` state initialized from `localStorage.getItem('pi-de-session-' + activeNode.id) || projectName(activeNode.cwd)`. Render as `<input className="session-name-input" value={sessionName} onChange={...} />` in stage header. Save to localStorage on change.
-  2. **Header layout (F3):** Replace `<h3>{activeNode.cwd}</h3>` with structured header: project name, session name input, machine:port metadata, status dot.
-  3. **Offline view (F4):** When `agent.status === "offline"`, render `<div className="offline-stage">` with Agent Offline message and last known info instead of `<agent-interface>`.
-  4. **Scroll fix (F5):** After `onInitState` fires, scroll `.overflow-y-auto` container to bottom: `requestAnimationFrame(() => { const el = agentInterfaceRef.current?.querySelector('.overflow-y-auto'); if (el) el.scrollTop = el.scrollHeight; });`
-  5. **Working dot (F2):** Add `<span className={`status-dot ${agent.isAgentStreaming ? 'working' : 'active'}`} />` in stage header.
-- `pi-de/src/App.css` — Add styles: `.session-name-input`, `.offline-stage`, `.header-info`, `.header-meta`, `.status-dot.working` (pulsing yellow: `background-color: #eab308; animation: pulse 1.5s ease-in-out infinite;`), `@keyframes pulse`.
-- `pi-de/src/App.test.tsx` — Add tests for session name, offline view, working dot.
+**Implementation**:
+1. In `App.tsx`, update the theme toggle button to show text labels alongside emoji. For example: `🌙 Dark`, `☀️ Light`, `🖥️ System`.
+2. Optionally add a tooltip explaining the toggle.
+3. In `TODO.md`, check off the theming item with a note: "Pi-DE supports dark/light/system. Pi TUI themes use 51 ANSI color tokens with no web CSS equivalent — full TUI theme parity requires a future mapping layer."
 
-**Exported symbols:**
-- `useAgent.ts`: adds `isAgentStreaming: boolean` to `UseAgentReturn`
+**Files to create/modify**:
+- Modify `pi-de/src/App.tsx` — update theme toggle button content
+- Modify `pi-de/src/App.css` — adjust `.theme-toggle` width if needed for text labels
+- Update `TODO.md` — mark theming item as done with explanation
 
-**Acceptance criteria:**
-- `isAgentStreaming` updates reactively when RemoteAgent streams/stops
-- Stage header shows project name prominently, editable session name, machine:port metadata
-- Session name persists in localStorage keyed by `pi-de-session-{nodeId}`
-- Session name defaults to project name (last path segment of cwd)
-- Offline agent selected → 'Agent Offline' message with last known info, no empty chat
-- Chat scrolls to bottom when selecting a new agent (after init_state)
-- Pulsing yellow dot in stage header when streaming, static green when idle
-- Tests pass: `cd pi-de && npm test`
-- Build succeeds: `cd pi-de && npm run build`
+**Acceptance criteria**:
+- Theme toggle shows clear text labels (Dark/Light/System)
+- Theme cycling still works correctly (dark → light → system → dark)
+- Existing theme tests still pass
+- `npm test && npm run build && npm run lint` all pass

@@ -1,24 +1,22 @@
-# Theming system — dark, light, and system modes with persistence
+# Add Cancel Button to Stage Header
 
-Implement theme support for Pi-DE with dark mode (current default), light mode, and system preference mode, with localStorage persistence and a toggle button.
+Add a cancel/stop button in Pi-DE's stage header that is visible only during streaming. Since `MessageEditor.isStreaming` is now always `false` (from Task 1's patch), the built-in stop button (■) will never render. Pi-DE needs its own cancel button.
 
-**Files to create:**
-- `pi-de/src/useTheme.ts` (~60 lines) — React hook: `useTheme(): { theme: Theme; resolvedTheme: "dark" | "light"; cycleTheme: () => void }`. Reads initial value from `localStorage("pi-de-theme")`, defaults to `"dark"`. For `"system"`, listens to `matchMedia("(prefers-color-scheme: dark)")`. `cycleTheme` cycles dark → light → system → dark. Returns `resolvedTheme` (actual dark/light after resolving system pref).
-- `pi-de/src/useTheme.test.ts` (~120 lines) — Tests for hook: init from localStorage, cycle order, system mode listener, resolvedTheme accuracy.
+**Implementation**:
+1. In `App.tsx`, add a cancel button inside `.stage-header`, next to the status dot, visible only when `isAgentStreaming` is `true`.
+2. Wire the button to call `agent.remoteAgent.abort()`.
+3. Style it in `App.css` — small, red-ish square icon (■) matching the pi-web-ui aesthetic, positioned in the header.
+4. `RemoteAgent.abort()` is currently a no-op — that's acceptable for now. The button provides the UI affordance; actual abort support requires pi-socket changes (out of scope per PRD).
 
-**Files to modify:**
-- `pi-de/src/App.css` — Add `.pi-de-light` class with light-mode CSS variable overrides: `--bg-dark: #f8fafc; --bg-panel: #ffffff; --bg-panel-hover: #f1f5f9; --text-main: #1e293b; --text-muted: #64748b; --accent: #059669; --accent-glow: rgba(5,150,105,0.3); --border-color: #e2e8f0; --danger: #dc2626;`. Add `.theme-toggle` button styles.
-- `pi-de/src/App.tsx` — Import `useTheme`. Add `const { theme, resolvedTheme, cycleTheme } = useTheme();`. Add toggle button after sidebar `<h2>`: `<button className="theme-toggle" onClick={cycleTheme}>{theme === "dark" ? "🌙" : theme === "light" ? "☀️" : "🖥️"}</button>`. Change layout div to include `pi-de-light` class when resolvedTheme is light. Change `agent-interface-container dark` to `agent-interface-container ${resolvedTheme}` (dynamic class).
+**Files to create/modify**:
+- Modify `pi-de/src/App.tsx` — add cancel button in stage header, conditionally rendered when `isAgentStreaming` is true
+- Modify `pi-de/src/App.css` — add `.btn-cancel-stream` styles
+- Add tests in `pi-de/src/App.test.tsx` — verify cancel button appears during streaming and is hidden when idle
 
-**Exported symbols:**
-- `useTheme.ts`: `useTheme()` hook, `Theme` type ("dark" | "light" | "system")
-
-**Acceptance criteria:**
-- Toggle cycles dark → light → system → dark
-- Dark mode: existing appearance unchanged
-- Light mode: light backgrounds, dark text, green accent
-- System mode: follows OS via prefers-color-scheme
-- Choice persisted in localStorage key `pi-de-theme`
-- `<agent-interface>` web component correctly switches (`.dark` class toggles)
-- Tests pass: `cd pi-de && npm test`
-- Build succeeds: `cd pi-de && npm run build`
+**Acceptance criteria**:
+- Cancel button (■) visible in stage header only during streaming
+- Cancel button calls `remoteAgent.abort()` on click
+- Cancel button hidden when not streaming
+- Existing stage header layout (back button, session name, status dot) not disrupted
+- Tests verify visibility and click behavior
+- `npm test && npm run build && npm run lint` all pass
