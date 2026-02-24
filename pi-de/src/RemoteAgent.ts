@@ -23,7 +23,7 @@ import type {
   TextContent,
   UserMessage,
 } from "@mariozechner/pi-ai";
-import type { InitStateEvent, SocketEvent, Tool, HistoryPageResponse } from "./types";
+import type { InitStateEvent, SocketEvent, Tool, HistoryPageResponse, CommandInfo, FileInfo, AttachFileResponse } from "./types";
 
 /** Minimal Model stub for display purposes (remote agent owns the real model). */
 const REMOTE_MODEL = {
@@ -55,6 +55,9 @@ export class RemoteAgent {
   onInitState: ((event: InitStateEvent) => void) | null = null;
   onHistoryPage: ((page: HistoryPageResponse) => void) | null = null;
   onError: ((error: string) => void) | null = null;
+  onCommandsList: ((commands: CommandInfo[]) => void) | null = null;
+  onFilesList: ((files: FileInfo[], cwd: string) => void) | null = null;
+  onAttachFileAck: ((ack: AttachFileResponse) => void) | null = null;
 
   // Required by AgentInterface (prevents it from overriding with proxy/key defaults)
   streamFn: unknown = () => {};
@@ -163,7 +166,43 @@ export class RemoteAgent {
   }
 
   abort(): void {
-    // Remote agents don't support abort from the web UI
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    this.ws.send(JSON.stringify({ type: "abort" }));
+  }
+
+  /**
+   * Request a list of available commands for / autocomplete.
+   */
+  listCommands(): void {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    this.ws.send(JSON.stringify({ type: "list_commands" }));
+  }
+
+  /**
+   * Request a list of files matching the given prefix for @ autocomplete.
+   * If prefix is not provided, returns files in the current directory.
+   */
+  listFiles(prefix?: string): void {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    this.ws.send(JSON.stringify({ type: "list_files", prefix }));
+  }
+
+  /**
+   * Attach a file to the next message.
+   * Encodes the file content as base64 and sends an attach_file request.
+   */
+  attachFile(filename: string, content: ArrayBuffer, mimeType?: string): void {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    // Convert ArrayBuffer to base64
+    const bytes = new Uint8Array(content);
+    const binaryString = String.fromCharCode(...Array.from(bytes));
+    const base64 = btoa(binaryString);
+    this.ws.send(JSON.stringify({
+      type: "attach_file",
+      filename,
+      content: base64,
+      mimeType,
+    }));
   }
 
   setModel(_m: Model<Api>): void {
@@ -207,6 +246,33 @@ export class RemoteAgent {
         this.onHistoryPage(page);
       }
       this.emit({ type: "agent_end", messages: this._state.messages });
+      return;
+    }
+
+    // Handle commands_list response for / autocomplete
+    if (socketEvent.type === "commands_list") {
+      const event = socketEvent as any;
+      if (this.onCommandsList && event.commands) {
+        this.onCommandsList(event.commands);
+      }
+      return;
+    }
+
+    // Handle files_list response for @ autocomplete
+    if (socketEvent.type === "files_list") {
+      const event = socketEvent as any;
+      if (this.onFilesList && event.files && event.cwd) {
+        this.onFilesList(event.files, event.cwd);
+      }
+      return;
+    }
+
+    // Handle attach_file_ack response
+    if (socketEvent.type === "attach_file_ack") {
+      const ack = socketEvent as AttachFileResponse;
+      if (this.onAttachFileAck) {
+        this.onAttachFileAck(ack);
+      }
       return;
     }
 

@@ -38,6 +38,89 @@ export interface FetchHistoryRequest {
 }
 
 /**
+ * Client request to abort the current agent operation.
+ * Sent as JSON over WebSocket; server calls ctx.abort() to cancel work.
+ */
+export interface AbortRequest {
+  type: "abort";
+}
+
+/**
+ * Client request to list available / commands and skills.
+ * Sent as JSON over WebSocket; server responds with CommandsListResponse.
+ */
+export interface ListCommandsRequest {
+  type: "list_commands";
+}
+
+/**
+ * Server response with available / commands and skills.
+ * Sent in response to a ListCommandsRequest.
+ */
+export interface CommandsListResponse {
+  type: "commands_list";
+  commands: CommandInfo[];
+}
+
+/**
+ * Information about a single / command or skill.
+ */
+export interface CommandInfo {
+  name: string;        // e.g. "/help", "/reload", "/skill:harden"
+  description: string;
+}
+
+/**
+ * Client request to list files for @ autocomplete.
+ * Sent as JSON over WebSocket; server responds with FilesListResponse.
+ */
+export interface ListFilesRequest {
+  type: "list_files";
+  prefix?: string;  // partial path to filter/complete
+}
+
+/**
+ * File information for directory listing.
+ */
+export interface FileInfo {
+  path: string;        // relative to cwd
+  isDirectory: boolean;
+}
+
+/**
+ * Server response with file listings for @ autocomplete.
+ * Contains file info in the target directory (or cwd if no prefix).
+ */
+export interface FilesListResponse {
+  type: "files_list";
+  files: FileInfo[];
+  cwd: string;  // agent's working directory for context
+}
+
+/**
+ * Client request to attach a file to the next message.
+ * Sent as JSON over WebSocket; server decodes base64 content and includes
+ * in next pi.sendUserMessage() call as ImageContent or TextContent.
+ */
+export interface AttachFileRequest {
+  type: "attach_file";
+  filename: string;
+  content: string;      // base64-encoded file content
+  mimeType?: string;    // e.g. "image/png", "text/plain"
+}
+
+/**
+ * Server acknowledgement of file attachment.
+ * Sent back to client after processing attach_file request.
+ */
+export interface AttachFileResponse {
+  type: "attach_file_ack";
+  filename: string;
+  success: boolean;
+  error?: string;
+}
+
+/**
  * Server response to a fetch_history request.
  * Contains a slice of older messages ready to prepend to the conversation.
  */
@@ -52,7 +135,7 @@ export interface HistoryPageResponse {
  * Wire protocol from pi-socket: either init_state or a forwarded pi AgentEvent.
  * pi-socket forwards events as-is — no custom decomposition.
  */
-export type SocketEvent = InitStateEvent | AgentEvent | HistoryPageResponse;
+export type SocketEvent = InitStateEvent | AgentEvent | HistoryPageResponse | CommandsListResponse | FilesListResponse | AttachFileResponse;
 
 // ── Hypivisor Registry Protocol ───────────────────────────────
 

@@ -28,10 +28,12 @@ import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { WebSocketServer, WebSocket } from "ws";
 import portfinder from "portfinder";
 import os from "node:os";
+import fs from "node:fs";
+import path from "node:path";
 import { buildInitState, getHistoryPage } from "./history.js";
 import { boundary } from "./safety.js";
 import * as log from "./log.js";
-import type { RpcRequest, FetchHistoryRequest } from "./types.js";
+import type { RpcRequest, FetchHistoryRequest, AbortRequest, ListCommandsRequest, CommandInfo, CommandsListResponse, ListFilesRequest, FileInfo, FilesListResponse, AttachFileRequest, AttachFileResponse } from "./types.js";
 
 export default function piSocket(pi: ExtensionAPI) {
   let nodeId = process.pid.toString(); // fallback until session provides UUID
@@ -114,6 +116,166 @@ export default function piSocket(pi: ExtensionAPI) {
           const page = getHistoryPage(ctx.sessionManager.getBranch(), req.before, req.limit);
           if (ws.readyState === WebSocket.OPEN) {
             ws.send(safeSerialize(page));
+          }
+          return;
+        }
+
+        // Handle abort requests
+        if (parsed && typeof parsed === "object" && (parsed as any).type === "abort") {
+          log.info("pi-socket", "abort requested by client");
+          ctx.abort();
+          return;
+        }
+
+        // Handle list_commands requests — returns slash commands (/, /help, /skill:xxx)
+        if (parsed && typeof parsed === "object" && (parsed as any).type === "list_commands") {
+          const slashCommands = pi.getCommands();
+          const commands: CommandInfo[] = slashCommands.map(c => ({
+            name: `/${c.name}`,
+            description: c.description ?? "",
+          }));
+          const response: CommandsListResponse = { type: "commands_list", commands };
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(safeSerialize(response));
+          }
+          return;
+        }
+
+        // Handle list_files requests
+        if (parsed && typeof parsed === "object" && (parsed as any).type === "list_files") {
+          const req = parsed as ListFilesRequest;
+          const cwd = process.cwd();
+          const targetDir = req.prefix 
+            ? path.resolve(cwd, path.dirname(req.prefix))
+            : cwd;
+          
+          // Security check: ensure targetDir is within cwd (prevent path traversal)
+          if (!targetDir.startsWith(cwd)) {
+            // Escape attempt detected - clamp to cwd
+            const response: FilesListResponse = { type: "files_list", files: [], cwd };
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(safeSerialize(response));
+            }
+            return;
+          }
+          
+          // Read directory entries safely
+          let files: FileInfo[] = [];
+          try {
+            const entries = fs.readdirSync(targetDir, { withFileTypes: true });
+            
+            // Filter and map entries
+            for (const entry of entries) {
+              // Skip hidden files (starting with .)
+              if (entry.name.startsWith(".")) {
+                continue;
+              }
+              
+              files.push({
+                path: path.relative(cwd, path.join(targetDir, entry.name)),
+                isDirectory: entry.isDirectory(),
+              });
+              
+              // Limit to ~100 entries to avoid huge payloads
+              if (files.length >= 100) {
+                break;
+              }
+            }
+          } catch {
+            // Directory doesn't exist or is unreadable - return empty array
+            files = [];
+          }
+          
+          const response: FilesListResponse = { type: "files_list", files, cwd };
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(safeSerialize(response));
+          }
+          return;
+        }
+
+        // Handle file attachment requests
+        if (parsed && typeof parsed === "object" && (parsed as any).type === "attach_file") {
+          const req = parsed as AttachFileRequest;
+          const ack: AttachFileResponse = {
+            type: "attach_file_ack",
+            filename: req.filename,
+            success: false,
+          };
+
+          // Validate filename
+          if (!req.filename || typeof req.filename !== "string") {
+            ack.error = "filename is required";
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(safeSerialize(ack));
+            }
+            return;
+          }
+
+          // Validate content
+          if (!req.content || typeof req.content !== "string") {
+            ack.error = "content is required";
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(safeSerialize(ack));
+            }
+            return;
+          }
+
+          // Check file size: reject files > 10MB
+          const estimatedBytes = Buffer.byteLength(req.content, "utf-8");
+          const maxBytes = 10 * 1024 * 1024; // 10MB
+          if (estimatedBytes > maxBytes) {
+            ack.error = `file too large (${Math.round(estimatedBytes / 1024 / 1024)}MB > 10MB)`;
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(safeSerialize(ack));
+            }
+            return;
+          }
+
+          try {
+            // Decode base64 content
+            const decodedBytes = Buffer.from(req.content, "base64");
+            const isImage = req.mimeType && req.mimeType.startsWith("image/");
+
+            // Build content array for sendUserMessage
+            const content: any[] = [];
+
+            if (isImage && req.mimeType) {
+              // Image: add as ImageContent with base64 data
+              content.push({
+                type: "image",
+                data: req.content,
+                mimeType: req.mimeType,
+              } as any);
+            } else {
+              // Text: add as TextContent with filename prefix for context
+              const text = decodedBytes.toString("utf-8");
+              content.push({
+                type: "text",
+                text: `[File: ${req.filename}]\n${text}`,
+              } as any);
+            }
+
+            // Send via sendUserMessage with deliverAs appropriate based on agent idle state
+            try {
+              if (ctx.isIdle()) {
+                pi.sendUserMessage(content);
+              } else {
+                pi.sendUserMessage(content, { deliverAs: "followUp" });
+              }
+              ack.success = true;
+              log.info("pi-socket", "file attached", { filename: req.filename, bytes: estimatedBytes });
+            } catch (err) {
+              ack.error = `failed to attach file: ${String(err)}`;
+              log.error("attach_file.sendUserMessage", err);
+            }
+          } catch (err) {
+            ack.error = `failed to decode file: ${String(err)}`;
+            log.error("attach_file.decode", err);
+          }
+
+          // Send ack back to client
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(safeSerialize(ack));
           }
           return;
         }

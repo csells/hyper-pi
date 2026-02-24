@@ -1,185 +1,146 @@
 # Planning Outline
 
 ## 1. PRD Understanding Summary
-The PRD specifies 5 remaining QoL features for Pi-DE:
+The PRD specifies 5 QoL features (F1–F5) for Pi-DE. Comparing against the **current codebase**:
 
-- **F1 (Send During Streaming)**: Users can't type/send while the agent streams. Two gates in pi-web-ui's `AgentInterface.sendMessage()` (blocks on `isStreaming`) and `MessageEditor.handleKeyDown()` (blocks Enter on `isStreaming`) must be bypassed via patches.
-- **F2 (Cancel + Submit Buttons)**: During streaming, only a stop button (■) is shown. Users need both a send button AND a cancel/stop button visible. The recommended approach: override `MessageEditor.isStreaming` to always be `false` (so it always shows the send button), and add a separate cancel button in Pi-DE's stage header.
-- **F3 (Theming)**: The existing dark/light/system toggle already covers the two built-in pi themes. TUI themes use 51 ANSI tokens with no web CSS equivalent. Mark as addressed with clear labels.
-- **F4 (Spawn Verification)**: Manual verification via `surf` browser testing. No code changes unless bugs are found.
-- **F5 (Tool Output Investigation)**: Compare TUI vs Pi-DE tool rendering. CSS-only adjustments if needed.
+| Feature | PRD Spec | Current State |
+|---------|----------|---------------|
+| **F1**: Send during streaming | Patch `AgentInterface.sendMessage` + `MessageEditor.isStreaming` | ✅ **DONE** — `patchSendDuringStreaming.ts` exists with tests, wired into `App.tsx` |
+| **F2**: Cancel + submit buttons | Both stop and send buttons during streaming | ⚠️ **PARTIAL** — MessageEditor conditionally shows stop (empty input) vs send (typed text). But `RemoteAgent.abort()` is a no-op. TODO.md marks `[~]` |
+| **F3**: Theming | Support all pi themes | ✅ **DONE** — 7 themes in `piThemes.ts` with 51→CSS token mapping, `<select>` dropdown |
+| **F4**: Spawn verification | Manual surf test | ✅ **DONE** — checked in TODO.md |
+| **F5**: Tool output investigation | CSS adjustments | ✅ **DONE** — `toolRenderers.ts` with compact TUI-style renderers |
+
+**The sole remaining work**: Implement the abort wire protocol so the stop button (■) actually cancels agent work. This requires changes across 3 components: `hyper-pi-protocol` (types), `pi-socket` (handler calling `ctx.abort()`), and `pi-de` (`RemoteAgent.abort()` sending JSON over WebSocket).
 
 ## 2. Relevant Code/Docs/Resources Reviewed
 | File | Key Findings |
 |------|-------------|
-| `pi-de/src/patchMobileKeyboard.ts` | **The proven patch pattern**: MutationObserver finds textarea in light DOM, registers capturing keydown listener to intercept before Lit's event binding. Returns cleanup function. |
-| `pi-de/src/patchMobileKeyboard.test.ts` | **Test pattern**: Creates mock DOM elements, mocks `matchMedia`, tests event interception with `stopImmediatePropagation` spies, tests MutationObserver async textarea discovery, tests cleanup. |
-| `pi-web-ui/AgentInterface.ts` | `sendMessage()` has explicit `isStreaming` gate on line: `if ((!input.trim()...) \|\| this.session?.state.isStreaming) return;`. Passes `.isStreaming=${state.isStreaming}` to `<message-editor>`. The `session.abort()` is wired to `onAbort`. |
-| `pi-web-ui/MessageEditor.ts` | `handleKeyDown()` gates Enter send on `!this.isStreaming`. `render()` uses a ternary: `this.isStreaming ? [stop button] : [send button]` — never both. `isStreaming` is a `@property()`. |
-| `pi-de/src/RemoteAgent.ts` | `abort()` is a no-op: `// Remote agents don't support abort from the web UI`. This needs to be implemented for F2's cancel button. |
-| `pi-socket/src/index.ts` | No abort mechanism exists. `sendUserMessage` with `deliverAs: "followUp"` is how messages are injected during streaming. No `pi.abort()` or similar call. |
-| `pi-de/src/App.tsx` | Wires `patchMobileKeyboard(el)` in the `useEffect` that sets `session` on `<agent-interface>`. The `isAgentStreaming` state from `useAgent` drives status dot `working` class. |
-| `pi-de/src/useAgent.ts` | Exposes `isAgentStreaming` from `remoteAgent.state.isStreaming` via subscription. |
-| `pi-de/src/useTheme.ts` | Theme cycle: dark → light → system. Persists to localStorage. |
+| `TODO.md` | End-to-End section: `[ ] abort/cancel + send-during-streaming` — "Needs a new `abort` WebSocket message type in the protocol, a pi-socket handler that calls `pi.abort()`, and `RemoteAgent.abort()` sending it over WebSocket." |
+| `pi-de/src/patchSendDuringStreaming.ts` | Overrides `MessageEditor.isStreaming` to conditionally return true (empty input + streaming → stop ■) or false (text in input → send). The stop button's click handler already calls `AgentInterface.session.abort()` → `RemoteAgent.abort()` |
+| `pi-de/src/RemoteAgent.ts:159` | `abort(): void { // Remote agents don't support abort from the web UI }` — **no-op** |
+| `pi-socket/src/index.ts:88-138` | `ws.on("message")` handler: parses JSON, handles `fetch_history`, else sends plain text via `pi.sendUserMessage()`. **No abort handling** — `{ "type": "abort" }` falls through to `sendUserMessage`, which is wrong. |
+| `pi-socket/.../extensions/types.d.ts:193` | `ExtensionContext` has `abort(): void` — the abort capability exists on `ctx` (passed to `session_start` handler) |
+| `pi-socket/.../extensions/types.d.ts:191` | `ExtensionContext` has `isIdle(): boolean` — already used by pi-socket for follow-up logic |
+| `hyper-pi-protocol/src/index.ts` | Defines `FetchHistoryRequest`, `HistoryPageResponse`, `SocketEvent`. No `AbortRequest` type yet. |
+| `pi-socket/src/index.test.ts` | `mockCtx` has `isIdle: vi.fn()` but **no `abort` mock** — needs updating for abort tests |
+| `hypivisor/src/lib.rs` | Bidirectional relay — all WebSocket text frames forwarded transparently between Pi-DE and pi-socket. **No hypivisor changes needed.** |
+| `pi-de/src/App.css` | `.btn-cancel-stream` CSS already defined (red border, danger color). But no button in JSX — the stop button lives inside `<message-editor>` via the `isStreaming` patch. |
+| `pi-agent-core Agent.abort()` | Calls `this.abortController?.abort()` — stops the LLM stream and agent loop. This is what `ctx.abort()` delegates to. |
 
 ## 3. Sequential Implementation Steps
-1. **Create `patchSendDuringStreaming.ts`**: Patch `AgentInterface.sendMessage()` to remove the `isStreaming` gate. Also patch `MessageEditor.isStreaming` property to always return `false` so it always renders the send button and allows Enter-to-send.
-2. **Create `patchSendDuringStreaming.test.ts`**: Unit tests following the `patchMobileKeyboard.test.ts` pattern.
-3. **Add cancel button in `App.tsx`**: Show a "Cancel" button in the stage header (next to the status dot) when `isAgentStreaming` is true. Wire it to send a cancel signal.
-4. **Implement `RemoteAgent.abort()`**: Send an abort/cancel message over the WebSocket. Since pi-socket doesn't have a dedicated abort handler, the simplest approach is to send a text like `/cancel` or use `followUp` semantics — but actually, `pi.sendUserMessage()` with `deliverAs: "followUp"` is the only mechanism. The `abort()` on `Agent` uses `AbortController`. Since there's no wire protocol for abort, the cancel button should instead just send a follow-up message like "stop" (which the user can do manually anyway). **Actually**: Looking deeper, `RemoteAgent.abort()` can't do anything because pi-socket has no abort handler. The PRD's F2 says "calls `RemoteAgent.abort()`" but abort is a no-op. The cancel button should visually exist but the tooltip should indicate it sends a follow-up — or we leave abort as no-op and document the limitation.
-5. **Style the cancel button in `App.css`**.
-6. **Update theme toggle labels** in `App.tsx` to clearly show "Dark"/"Light"/"System" per F3.
-7. **F4 and F5 are manual verification/investigation tasks** — no code changes expected.
+1. **Add `AbortRequest` type to `hyper-pi-protocol/src/index.ts`** — `{ type: "abort" }` interface, exported alongside `FetchHistoryRequest`
+2. **Build protocol**: `cd hyper-pi-protocol && npm run build` so downstream packages pick up the type
+3. **Add abort handler in `pi-socket/src/index.ts`** — after the `fetch_history` check, detect `{ type: "abort" }` and call `ctx.abort()`. Log at info level.
+4. **Add `abort: vi.fn()` to `mockCtx` in `pi-socket/src/index.test.ts`** and add tests: abort message calls `ctx.abort()`, abort doesn't call `sendUserMessage`
+5. **Implement `RemoteAgent.abort()` in `pi-de/src/RemoteAgent.ts`** — send `JSON.stringify({ type: "abort" })` over WebSocket if connected
+6. **Re-export `AbortRequest` from `pi-de/src/types.ts`** (for type consistency)
+7. **Update `pi-de/src/RemoteAgent.test.ts`** — test abort sends JSON, test abort is no-op when disconnected
+8. **Update `TODO.md`** — check off the abort/cancel item in the End-to-End section
+9. **Run all tests**: `cd pi-socket && npm test`, `cd pi-de && npm test && npm run build && npm run lint`
 
 ## 4. Parallelized Task Graph
 ### Gap Analysis
 
 #### Missing Requirements
-- **No abort wire protocol**: pi-socket has no mechanism to cancel/abort the current agent operation remotely. `RemoteAgent.abort()` is a no-op. The cancel button can only provide visual feedback — it can't actually stop the agent. This is an intentional pi constraint ("pi is never modified"). The cancel button should call `RemoteAgent.abort()` but users should understand it's a no-op until pi-socket adds abort support.
-- **Patch composition with mobile**: The `patchSendDuringStreaming` and `patchMobileKeyboard` patches both add capturing keydown listeners on the same textarea. Order matters — the mobile patch calls `stopImmediatePropagation` on Enter for mobile, which would prevent the streaming patch from firing. The streaming patch must check `!isMobileDevice()` before handling Enter.
-- **MessageEditor `isStreaming` override**: Setting `isStreaming` to always `false` on MessageEditor means the stop button (■) in the MessageEditor will never show. This is fine because F2 adds a cancel button in Pi-DE's own stage header instead.
+- **Abort is fire-and-forget**: `ctx.abort()` is void. Pi-DE gets no confirmation that abort succeeded — the agent will stop streaming and emit `agent_end`, which RemoteAgent already handles by setting `isStreaming = false`. No additional response handling needed.
+- **Abort during tool execution**: `ctx.abort()` aborts the current `AbortController`, which cancels the LLM stream. If a bash command is running, it won't be killed (that requires `ctx.abortBash()`). This is acceptable — the TUI's stop button has the same behavior.
 
 #### Edge Cases
-- **Rapid message sending**: User could spam Enter during streaming. `AgentInterface.sendMessage` clears the editor value, and pi-socket uses `deliverAs: "followUp"` — so rapid sends should queue correctly.
-- **Patch timing**: The `<agent-interface>` element may not have rendered `<message-editor>` yet when the patch runs. Use MutationObserver (same as mobile patch) to find elements.
-- **Cleanup on agent switch**: When the user switches agents, the old patch cleanup must run and the new patch must be applied to the new `<agent-interface>` render cycle.
+- **Abort when not streaming**: `ctx.abort()` is safe to call when idle — the `abortController` is undefined, so `abort()` is a no-op. No guard needed in pi-socket.
+- **Rapid abort + send**: User clicks stop (abort) then immediately types and sends. The abort cancels the current stream; the new message arrives via `sendUserMessage` with `deliverAs: "followUp"` because the agent may still be in a streaming state briefly. This is correct behavior.
+- **JSON `{ "type": "abort" }` must not fall through to `sendUserMessage`**: Currently, any JSON that's not `fetch_history` is sent as a plain text prompt. The abort handler must `return` before the fallthrough.
 
 #### Security Considerations
-- No security concerns — all changes are frontend UI patches within the existing trust boundary.
+- No new security concerns — abort operates within the existing WebSocket trust boundary. Any connected client can already send arbitrary prompts.
 
 #### Testing Requirements
-- Unit tests for `patchSendDuringStreaming.ts` following `patchMobileKeyboard.test.ts` pattern
-- Unit tests for cancel button visibility in `App.test.tsx`
-- All existing tests must continue passing (115 tests)
-- Build and lint must pass: `npm test && npm run build && npm run lint`
+- pi-socket unit tests: abort message calls `ctx.abort()`, abort doesn't trigger `sendUserMessage`, non-abort JSON still treated as prompt
+- Pi-DE unit tests: `RemoteAgent.abort()` sends `{ type: "abort" }` JSON, abort is no-op when WebSocket is null or not OPEN
+- All existing tests pass (177 pi-de, 94 pi-socket)
 
 ## Tasks
 
-### Task 1: Patch Send-During-Streaming and MessageEditor isStreaming Override
+### Task 1: Add abort wire protocol type and pi-socket abort handler
 
-Create `pi-de/src/patchSendDuringStreaming.ts` that patches two things:
+Add the `AbortRequest` type to the shared wire protocol and implement the abort message handler in pi-socket.
 
-1. **`AgentInterface.sendMessage()`**: After the `<agent-interface>` element is available, override its `sendMessage` method to remove the `isStreaming` gate. The patched version should allow sending when `this.session?.state.isStreaming` is true, but still block empty messages and still call `this.session.prompt()`.
+**hyper-pi-protocol changes** (`hyper-pi-protocol/src/index.ts`):
+- Add `AbortRequest` interface: `{ type: "abort" }` — exported alongside `FetchHistoryRequest`
+- Add to the client→server message types section (near `FetchHistoryRequest`)
+- Run `cd hyper-pi-protocol && npm run build` to compile
 
-2. **`MessageEditor.isStreaming` property**: Override the `isStreaming` property on the `<message-editor>` element (found via `el.querySelector("message-editor")`) to always return `false`. This makes it always render the send button (not the stop button) and always allow Enter-to-send via its `handleKeyDown`.
+**pi-socket changes** (`pi-socket/src/index.ts`):
+- In the `ws.on("message")` handler (around line 113), after the `fetch_history` check and before the plain-text prompt fallthrough, add:
+  ```typescript
+  if (parsed && typeof parsed === "object" && (parsed as any).type === "abort") {
+    ctx.abort();
+    return;
+  }
+  ```
+- Import `AbortRequest` from `hyper-pi-protocol` in `pi-socket/src/types.ts` re-exports
+- Log at info level: `log.info("pi-socket", "abort requested by client")`
 
-Use MutationObserver to find elements in light DOM (same pattern as `patchMobileKeyboard.ts`). Return a cleanup function.
-
-**Composition with mobile patch**: The `isStreaming=false` override on MessageEditor means `handleKeyDown` will allow Enter-to-send. On mobile, the existing `patchMobileKeyboard` fires first (capturing phase, registered before this patch) and calls `stopImmediatePropagation` for Enter — so Enter on mobile still inserts a newline. On desktop, `handleKeyDown` allows send. This composes correctly without additional logic.
-
-**Files to create/modify**:
-- Create `pi-de/src/patchSendDuringStreaming.ts` — exports `patchSendDuringStreaming(el: HTMLElement): () => void`
-- Create `pi-de/src/patchSendDuringStreaming.test.ts` — unit tests following `patchMobileKeyboard.test.ts` patterns
-- Modify `pi-de/src/App.tsx` — import and call `patchSendDuringStreaming(el)` in the `useEffect` that sets up `<agent-interface>`, alongside the existing `patchMobileKeyboard(el)` call. Compose cleanups.
+**pi-socket test changes** (`pi-socket/src/index.test.ts`):
+- Add `abort: vi.fn()` to `mockCtx` in `beforeEach`
+- Add test: "calls ctx.abort() when receiving abort message" — send `{ "type": "abort" }` buffer, verify `mockCtx.abort` called and `mockPi.sendUserMessage` NOT called
+- Add test: "does not treat abort as a text prompt" — verify `sendUserMessage` is not called for abort messages
+- Verify existing `fetch_history` and plain-text tests still pass
 
 **Acceptance criteria**:
-- `patchSendDuringStreaming()` overrides `AgentInterface.sendMessage` to remove isStreaming gate
-- `patchSendDuringStreaming()` overrides `MessageEditor.isStreaming` to always be `false`
-- Tests verify: sendMessage works during streaming, empty messages still blocked, MessageEditor always shows send button, cleanup restores original behavior
-- `patchMobileKeyboard` still works correctly (Enter = newline on mobile)
-- `npm test && npm run build && npm run lint` all pass
+- `AbortRequest` type exported from `hyper-pi-protocol`
+- pi-socket handles `{ "type": "abort" }` by calling `ctx.abort()` and returning (not falling through to sendUserMessage)
+- Tests verify abort handling and no regression
+- `cd hyper-pi-protocol && npm run build` passes
+- `cd pi-socket && npm test` passes (94+ tests)
 
 Dependencies: none
 
-### Task 2: Add Cancel Button to Stage Header
+### Task 2: Implement RemoteAgent.abort() in Pi-DE
 
-Add a cancel/stop button in Pi-DE's stage header that is visible only during streaming. Since `MessageEditor.isStreaming` is now always `false` (from Task 1's patch), the built-in stop button (■) will never render. Pi-DE needs its own cancel button.
+Change `RemoteAgent.abort()` from a no-op to sending a JSON abort message over WebSocket, completing the abort control flow from Pi-DE → hypivisor proxy → pi-socket → `ctx.abort()`.
 
-**Implementation**:
-1. In `App.tsx`, add a cancel button inside `.stage-header`, next to the status dot, visible only when `isAgentStreaming` is `true`.
-2. Wire the button to call `agent.remoteAgent.abort()`.
-3. Style it in `App.css` — small, red-ish square icon (■) matching the pi-web-ui aesthetic, positioned in the header.
-4. `RemoteAgent.abort()` is currently a no-op — that's acceptable for now. The button provides the UI affordance; actual abort support requires pi-socket changes (out of scope per PRD).
+**Pi-DE changes** (`pi-de/src/RemoteAgent.ts`):
+- Replace the no-op `abort()` method (line ~159) with:
+  ```typescript
+  abort(): void {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    this.ws.send(JSON.stringify({ type: "abort" }));
+  }
+  ```
+- Remove the comment `// Remote agents don't support abort from the web UI`
 
-**Files to create/modify**:
-- Modify `pi-de/src/App.tsx` — add cancel button in stage header, conditionally rendered when `isAgentStreaming` is true
-- Modify `pi-de/src/App.css` — add `.btn-cancel-stream` styles
-- Add tests in `pi-de/src/App.test.tsx` — verify cancel button appears during streaming and is hidden when idle
+**Pi-DE type re-export** (`pi-de/src/types.ts`):
+- Add `AbortRequest` to the re-exports from `hyper-pi-protocol`
 
-**Acceptance criteria**:
-- Cancel button (■) visible in stage header only during streaming
-- Cancel button calls `remoteAgent.abort()` on click
-- Cancel button hidden when not streaming
-- Existing stage header layout (back button, session name, status dot) not disrupted
-- Tests verify visibility and click behavior
-- `npm test && npm run build && npm run lint` all pass
+**Pi-DE test changes** (`pi-de/src/RemoteAgent.test.ts`):
+- Add test: "abort() sends abort JSON when connected" — create RemoteAgent, connect to mock WebSocket, call `abort()`, verify `ws.send` called with `'{"type":"abort"}'`
+- Add test: "abort() does nothing when WebSocket is null" — call `abort()` on unconnected RemoteAgent, no throw
+- Add test: "abort() does nothing when WebSocket is not OPEN" — set `readyState` to CLOSED, call `abort()`, verify `ws.send` not called
 
-Dependencies: Patch Send-During-Streaming and MessageEditor isStreaming Override
-
-### Task 3: Theme Toggle Label Update and F3 Completion
-
-Update the theme toggle in the sidebar to clearly display "Dark" / "Light" / "System" labels instead of just emoji icons. Mark F3 (theming) as addressed with documentation of the limitation.
-
-**Implementation**:
-1. In `App.tsx`, update the theme toggle button to show text labels alongside or instead of just emoji. For example: `🌙 Dark`, `☀️ Light`, `🖥️ System`.
-2. Optionally add a tooltip explaining the toggle.
-3. In `TODO.md`, check off the theming item with a note: "Pi-DE supports dark/light/system. Pi TUI themes use 51 ANSI color tokens with no web CSS equivalent — full TUI theme parity requires a future mapping layer."
-
-**Files to create/modify**:
-- Modify `pi-de/src/App.tsx` — update theme toggle button content
-- Modify `pi-de/src/App.css` — adjust `.theme-toggle` width if needed for text labels
-- Update `TODO.md` — mark theming item as done with explanation
+**TODO.md update**:
+- Change the End-to-End abort item from `[ ]` to `[x]` with note: "abort WebSocket message type added to protocol; pi-socket calls ctx.abort(); RemoteAgent.abort() sends { type: 'abort' } over WebSocket"
+- Change the QoL `[~]` cancel button item to `[x]` with updated note
 
 **Acceptance criteria**:
-- Theme toggle shows clear text labels (Dark/Light/System)
-- Theme cycling still works correctly (dark → light → system → dark)
-- Existing theme tests still pass
-- `npm test && npm run build && npm run lint` all pass
-
-Dependencies: none
-
-### Task 4: Spawn Verification (F4) and Tool Output Investigation (F5)
-
-Manually verify that Spawn works end-to-end using surf browser testing, and investigate tool output differences between TUI and Pi-DE.
-
-**Spawn Verification (F4)**:
-1. Start the hypivisor (in tmux)
-2. Start Pi-DE dev server (in tmux)
-3. Use `surf tab.new` to open Pi-DE
-4. Click "Spawn Agent", navigate to a directory, click "Deploy Agent Here"
-5. Verify the new agent appears in the roster
-6. Verify clicking the new agent shows the chat interface
-7. If bugs found, fix them
-
-**Tool Output Investigation (F5)**:
-1. Take a screenshot of Pi-DE showing a tool call result
-2. Compare visually with TUI tool output
-3. Document the differences
-4. If CSS-only fixes can improve parity, apply them to `App.css`
-5. Update `TODO.md` with findings
-
-**Files to create/modify**:
-- Possibly `pi-de/src/App.css` — CSS adjustments for tool output if needed
-- Update `TODO.md` — check off spawn and tool output items with notes
-
-**Acceptance criteria**:
-- Spawn verified working or bugs fixed
-- Tool output differences documented
-- Any CSS adjustments don't break existing styling
-- `npm test && npm run build && npm run lint` all pass
+- `RemoteAgent.abort()` sends `{ "type": "abort" }` JSON over WebSocket when connected
+- `RemoteAgent.abort()` is a safe no-op when disconnected
+- Stop button (■) in MessageEditor now actually cancels agent work end-to-end
+- Tests verify send behavior and edge cases
+- `cd pi-de && npm test && npm run build && npm run lint` passes (177+ tests)
 
 Dependencies: none
 
 ```tasks-json
 [
   {
-    "title": "Patch Send-During-Streaming and MessageEditor isStreaming Override",
-    "description": "Create `pi-de/src/patchSendDuringStreaming.ts` that patches two things:\n\n1. **`AgentInterface.sendMessage()`**: After the `<agent-interface>` element is available, override its `sendMessage` method to remove the `isStreaming` gate. The patched version should allow sending when `this.session?.state.isStreaming` is true, but still block empty messages and still call `this.session.prompt()`.\n\n2. **`MessageEditor.isStreaming` property**: Override the `isStreaming` property on the `<message-editor>` element (found via `el.querySelector(\"message-editor\")`) to always return `false`. This makes it always render the send button (not the stop button) and always allow Enter-to-send via its `handleKeyDown`.\n\nUse MutationObserver to find elements in light DOM (same pattern as `patchMobileKeyboard.ts`). Return a cleanup function.\n\n**Composition with mobile patch**: The `isStreaming=false` override on MessageEditor means `handleKeyDown` will allow Enter-to-send. On mobile, the existing `patchMobileKeyboard` fires first (capturing phase, registered before this patch) and calls `stopImmediatePropagation` for Enter — so Enter on mobile still inserts a newline. On desktop, `handleKeyDown` allows send. This composes correctly without additional logic.\n\n**Files to create/modify**:\n- Create `pi-de/src/patchSendDuringStreaming.ts` — exports `patchSendDuringStreaming(el: HTMLElement): () => void`\n- Create `pi-de/src/patchSendDuringStreaming.test.ts` — unit tests following `patchMobileKeyboard.test.ts` patterns\n- Modify `pi-de/src/App.tsx` — import and call `patchSendDuringStreaming(el)` in the `useEffect` that sets up `<agent-interface>`, alongside the existing `patchMobileKeyboard(el)` call. Compose cleanups.\n\n**Acceptance criteria**:\n- `patchSendDuringStreaming()` overrides `AgentInterface.sendMessage` to remove isStreaming gate\n- `patchSendDuringStreaming()` overrides `MessageEditor.isStreaming` to always be `false`\n- Tests verify: sendMessage works during streaming, empty messages still blocked, MessageEditor always shows send button, cleanup restores original behavior\n- `patchMobileKeyboard` still works correctly (Enter = newline on mobile)\n- `npm test && npm run build && npm run lint` all pass",
+    "title": "Add abort wire protocol type and pi-socket abort handler",
+    "description": "Add the `AbortRequest` type to the shared wire protocol and implement the abort message handler in pi-socket.\n\n**hyper-pi-protocol changes** (`hyper-pi-protocol/src/index.ts`):\n- Add `AbortRequest` interface: `{ type: \"abort\" }` — exported alongside `FetchHistoryRequest`\n- Add to the client→server message types section (near `FetchHistoryRequest`)\n- Run `cd hyper-pi-protocol && npm run build` to compile\n\n**pi-socket changes** (`pi-socket/src/index.ts`):\n- In the `ws.on(\"message\")` handler (around line 113), after the `fetch_history` check and before the plain-text prompt fallthrough, add abort detection:\n  ```typescript\n  if (parsed && typeof parsed === \"object\" && (parsed as any).type === \"abort\") {\n    ctx.abort();\n    return;\n  }\n  ```\n- Import `AbortRequest` from `hyper-pi-protocol` in `pi-socket/src/types.ts` re-exports\n- Log at info level: `log.info(\"pi-socket\", \"abort requested by client\")`\n\n**pi-socket test changes** (`pi-socket/src/index.test.ts`):\n- Add `abort: vi.fn()` to `mockCtx` in `beforeEach`\n- Add test: \"calls ctx.abort() when receiving abort message\" — send `{ \"type\": \"abort\" }` buffer, verify `mockCtx.abort` called and `mockPi.sendUserMessage` NOT called\n- Add test: \"does not treat abort as a text prompt\" — verify `sendUserMessage` is not called for abort messages\n- Verify existing `fetch_history` and plain-text tests still pass\n\n**Key implementation detail**: The abort handler MUST be placed after the `fetch_history` check but BEFORE the plain-text prompt fallthrough in the `ws.on(\"message\")` handler. Currently any JSON that's not `fetch_history` falls through to `sendUserMessage()` — the abort check must `return` before that.\n\n**Acceptance criteria**:\n- `AbortRequest` type exported from `hyper-pi-protocol`\n- pi-socket handles `{ \"type\": \"abort\" }` by calling `ctx.abort()` and returning (not falling through to sendUserMessage)\n- Tests verify abort handling and no regression on existing fetch_history/text prompt behavior\n- `cd hyper-pi-protocol && npm run build` passes\n- `cd pi-socket && npm test` passes (94+ tests)",
     "dependsOn": []
   },
   {
-    "title": "Add Cancel Button to Stage Header",
-    "description": "Add a cancel/stop button in Pi-DE's stage header that is visible only during streaming. Since `MessageEditor.isStreaming` is now always `false` (from Task 1's patch), the built-in stop button (■) will never render. Pi-DE needs its own cancel button.\n\n**Implementation**:\n1. In `App.tsx`, add a cancel button inside `.stage-header`, next to the status dot, visible only when `isAgentStreaming` is `true`.\n2. Wire the button to call `agent.remoteAgent.abort()`.\n3. Style it in `App.css` — small, red-ish square icon (■) matching the pi-web-ui aesthetic, positioned in the header.\n4. `RemoteAgent.abort()` is currently a no-op — that's acceptable for now. The button provides the UI affordance; actual abort support requires pi-socket changes (out of scope per PRD).\n\n**Files to create/modify**:\n- Modify `pi-de/src/App.tsx` — add cancel button in stage header, conditionally rendered when `isAgentStreaming` is true\n- Modify `pi-de/src/App.css` — add `.btn-cancel-stream` styles\n- Add tests in `pi-de/src/App.test.tsx` — verify cancel button appears during streaming and is hidden when idle\n\n**Acceptance criteria**:\n- Cancel button (■) visible in stage header only during streaming\n- Cancel button calls `remoteAgent.abort()` on click\n- Cancel button hidden when not streaming\n- Existing stage header layout (back button, session name, status dot) not disrupted\n- Tests verify visibility and click behavior\n- `npm test && npm run build && npm run lint` all pass",
-    "dependsOn": ["Patch Send-During-Streaming and MessageEditor isStreaming Override"]
-  },
-  {
-    "title": "Theme Toggle Label Update and F3 Completion",
-    "description": "Update the theme toggle in the sidebar to clearly display \"Dark\" / \"Light\" / \"System\" labels instead of just emoji icons. Mark F3 (theming) as addressed with documentation of the limitation.\n\n**Implementation**:\n1. In `App.tsx`, update the theme toggle button to show text labels alongside emoji. For example: `🌙 Dark`, `☀️ Light`, `🖥️ System`.\n2. Optionally add a tooltip explaining the toggle.\n3. In `TODO.md`, check off the theming item with a note: \"Pi-DE supports dark/light/system. Pi TUI themes use 51 ANSI color tokens with no web CSS equivalent — full TUI theme parity requires a future mapping layer.\"\n\n**Files to create/modify**:\n- Modify `pi-de/src/App.tsx` — update theme toggle button content\n- Modify `pi-de/src/App.css` — adjust `.theme-toggle` width if needed for text labels\n- Update `TODO.md` — mark theming item as done with explanation\n\n**Acceptance criteria**:\n- Theme toggle shows clear text labels (Dark/Light/System)\n- Theme cycling still works correctly (dark → light → system → dark)\n- Existing theme tests still pass\n- `npm test && npm run build && npm run lint` all pass",
-    "dependsOn": []
-  },
-  {
-    "title": "Spawn Verification (F4) and Tool Output Investigation (F5)",
-    "description": "Manually verify that Spawn works end-to-end using surf browser testing, and investigate tool output differences between TUI and Pi-DE.\n\n**Spawn Verification (F4)**:\n1. Start the hypivisor (in tmux): `cd hypivisor && cargo run`\n2. Start Pi-DE dev server (in tmux): `cd pi-de && npm run dev`\n3. Use `surf tab.new http://localhost:5173` to open Pi-DE\n4. Click \"Spawn Agent\", navigate to a directory, click \"Deploy Agent Here\"\n5. Verify the new agent appears in the roster\n6. Verify clicking the new agent shows the chat interface\n7. If bugs found, fix them and add tests\n\n**Tool Output Investigation (F5)**:\n1. Take a screenshot of Pi-DE showing a bash/tool call result using `surf screenshot`\n2. Compare visually with TUI tool output\n3. Document the differences in TODO.md\n4. If CSS-only fixes can improve visual parity, apply them to `App.css`\n5. Update `TODO.md` with findings and check off both items\n\n**Files to create/modify**:\n- Possibly `pi-de/src/App.css` — CSS adjustments for tool output if differences warrant changes\n- Update `TODO.md` — check off spawn and tool output items with notes\n\n**Acceptance criteria**:\n- Spawn verified working end-to-end OR bugs identified and fixed with tests\n- Tool output differences documented with screenshots or descriptions\n- Any CSS adjustments don't break existing styling or tests\n- `npm test && npm run build && npm run lint` all pass",
+    "title": "Implement RemoteAgent.abort() in Pi-DE",
+    "description": "Change `RemoteAgent.abort()` from a no-op to sending a JSON abort message over WebSocket, completing the abort control flow from Pi-DE → hypivisor proxy → pi-socket → `ctx.abort()`.\n\n**Pi-DE changes** (`pi-de/src/RemoteAgent.ts`):\n- Replace the no-op `abort()` method (line ~159) with:\n  ```typescript\n  abort(): void {\n    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;\n    this.ws.send(JSON.stringify({ type: \"abort\" }));\n  }\n  ```\n- Remove the comment `// Remote agents don't support abort from the web UI`\n\n**Pi-DE type re-export** (`pi-de/src/types.ts`):\n- Add `AbortRequest` to the re-exports from `hyper-pi-protocol` (the type will be added by the sibling task; if not yet available, define locally as `{ type: \"abort\" }` — the wire format is the contract)\n\n**Pi-DE test changes** (`pi-de/src/RemoteAgent.test.ts`):\n- Add test: \"abort() sends abort JSON when connected\" — create RemoteAgent, connect to mock WebSocket with `readyState = WebSocket.OPEN`, call `abort()`, verify `ws.send` called with `'{\"type\":\"abort\"}'`\n- Add test: \"abort() does nothing when WebSocket is null\" — call `abort()` on unconnected RemoteAgent, no throw\n- Add test: \"abort() does nothing when WebSocket is not OPEN\" — set `readyState` to CLOSED, call `abort()`, verify `ws.send` not called\n\n**TODO.md update**:\n- Change the End-to-End abort/cancel item from `[ ]` to `[x]` with note: \"abort WebSocket message type added to protocol; pi-socket calls ctx.abort(); RemoteAgent.abort() sends { type: 'abort' } over WebSocket\"\n- Change the QoL `[~]` cancel button item to `[x]` with updated note removing the 'abort is a no-op' caveat\n\n**How abort flows end-to-end**: User sees stop button (■) in MessageEditor when streaming with empty input → clicks it → MessageEditor calls `AgentInterface.session.abort()` → `RemoteAgent.abort()` → sends `{\"type\":\"abort\"}` over WebSocket → hypivisor relays transparently → pi-socket receives it → calls `ctx.abort()` → pi's AbortController fires → LLM stream stops → agent emits `agent_end` → RemoteAgent sets `isStreaming=false` → UI updates.\n\n**Acceptance criteria**:\n- `RemoteAgent.abort()` sends `{ \"type\": \"abort\" }` JSON over WebSocket when connected\n- `RemoteAgent.abort()` is a safe no-op when disconnected or WebSocket not OPEN\n- Stop button (■) in MessageEditor now actually cancels agent work end-to-end\n- Tests verify send behavior and edge cases (3 new tests minimum)\n- TODO.md updated to reflect completion\n- `cd pi-de && npm test && npm run build && npm run lint` passes (177+ tests)",
     "dependsOn": []
   }
 ]

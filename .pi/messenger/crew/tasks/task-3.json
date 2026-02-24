@@ -1,22 +1,13 @@
 {
   "id": "task-3",
-  "title": "Theme Toggle Label Update and F3 Completion",
-  "status": "done",
-  "depends_on": [],
-  "created_at": "2026-02-24T04:00:49.734Z",
-  "updated_at": "2026-02-24T04:04:51.498Z",
-  "attempt_count": 1,
-  "started_at": "2026-02-24T04:01:20.392Z",
-  "base_commit": "d2dc76f2473b1daf896ca78db4d64f28662640ef",
-  "completed_at": "2026-02-24T04:04:51.498Z",
-  "summary": "Theme Toggle Label Update and F3 Completion — Updated theme toggle button to display clear text labels ('🌙 Dark', '☀️ Light', '🖥️ System'), enhanced .theme-toggle CSS for proper layout and monospace font, marked F3 (theming) complete in TODO.md with note about ANSI color token limitations, and added F4/F5 checkoffs per SageArrow's findings. All theme tests pass. Build succeeds.",
-  "evidence": {
-    "commits": [
-      "d2dc76f"
-    ],
-    "tests": [
-      "useTheme.test.ts (9 passing)",
-      "App.test.tsx (21 passing)"
-    ]
-  }
+  "title": "Add list_commands protocol type and pi-socket handler for / autocomplete",
+  "status": "todo",
+  "depends_on": [
+    "task-1"
+  ],
+  "created_at": "2026-02-24T07:26:31.109Z",
+  "updated_at": "2026-02-24T07:36:12.264Z",
+  "attempt_count": 2,
+  "started_at": "2026-02-24T07:32:43.875Z",
+  "base_commit": "d26baa0252814fe56f2c3046cd6cff42ce5b26cd"
 }

@@ -1,23 +1,34 @@
-# Patch Send-During-Streaming and MessageEditor isStreaming Override
+# Add abort wire protocol type and pi-socket abort handler
 
-Create `pi-de/src/patchSendDuringStreaming.ts` that patches two things:
+Add the `AbortRequest` type to the shared wire protocol and implement the abort message handler in pi-socket.
 
-1. **`AgentInterface.sendMessage()`**: After the `<agent-interface>` element is available, override its `sendMessage` method to remove the `isStreaming` gate. The patched version should allow sending when `this.session?.state.isStreaming` is true, but still block empty messages and still call `this.session.prompt()`.
+**hyper-pi-protocol changes** (`hyper-pi-protocol/src/index.ts`):
+- Add `AbortRequest` interface: `{ type: "abort" }` — exported alongside `FetchHistoryRequest`
+- Add to the client→server message types section (near `FetchHistoryRequest`)
+- Run `cd hyper-pi-protocol && npm run build` to compile
 
-2. **`MessageEditor.isStreaming` property**: Override the `isStreaming` property on the `<message-editor>` element (found via `el.querySelector("message-editor")`) to always return `false`. This makes it always render the send button (not the stop button) and always allow Enter-to-send via its `handleKeyDown`.
+**pi-socket changes** (`pi-socket/src/index.ts`):
+- In the `ws.on("message")` handler (around line 113), after the `fetch_history` check and before the plain-text prompt fallthrough, add abort detection:
+  ```typescript
+  if (parsed && typeof parsed === "object" && (parsed as any).type === "abort") {
+    ctx.abort();
+    return;
+  }
+  ```
+- Import `AbortRequest` from `hyper-pi-protocol` in `pi-socket/src/types.ts` re-exports
+- Log at info level: `log.info("pi-socket", "abort requested by client")`
 
-Use MutationObserver to find elements in light DOM (same pattern as `patchMobileKeyboard.ts`). Return a cleanup function.
+**pi-socket test changes** (`pi-socket/src/index.test.ts`):
+- Add `abort: vi.fn()` to `mockCtx` in `beforeEach`
+- Add test: "calls ctx.abort() when receiving abort message" — send `{ "type": "abort" }` buffer, verify `mockCtx.abort` called and `mockPi.sendUserMessage` NOT called
+- Add test: "does not treat abort as a text prompt" — verify `sendUserMessage` is not called for abort messages
+- Verify existing `fetch_history` and plain-text tests still pass
 
-**Composition with mobile patch**: The `isStreaming=false` override on MessageEditor means `handleKeyDown` will allow Enter-to-send. On mobile, the existing `patchMobileKeyboard` fires first (capturing phase, registered before this patch) and calls `stopImmediatePropagation` for Enter — so Enter on mobile still inserts a newline. On desktop, `handleKeyDown` allows send. This composes correctly without additional logic.
-
-**Files to create/modify**:
-- Create `pi-de/src/patchSendDuringStreaming.ts` — exports `patchSendDuringStreaming(el: HTMLElement): () => void`
-- Create `pi-de/src/patchSendDuringStreaming.test.ts` — unit tests following `patchMobileKeyboard.test.ts` patterns
-- Modify `pi-de/src/App.tsx` — import and call `patchSendDuringStreaming(el)` in the `useEffect` that sets up `<agent-interface>`, alongside the existing `patchMobileKeyboard(el)` call. Compose cleanups.
+**Key implementation detail**: The abort handler MUST be placed after the `fetch_history` check but BEFORE the plain-text prompt fallthrough in the `ws.on("message")` handler. Currently any JSON that's not `fetch_history` falls through to `sendUserMessage()` — the abort check must `return` before that.
 
 **Acceptance criteria**:
-- `patchSendDuringStreaming()` overrides `AgentInterface.sendMessage` to remove isStreaming gate
-- `patchSendDuringStreaming()` overrides `MessageEditor.isStreaming` to always be `false`
-- Tests verify: sendMessage works during streaming, empty messages still blocked, MessageEditor always shows send button, cleanup restores original behavior
-- `patchMobileKeyboard` still works correctly (Enter = newline on mobile)
-- `npm test && npm run build && npm run lint` all pass
+- `AbortRequest` type exported from `hyper-pi-protocol`
+- pi-socket handles `{ "type": "abort" }` by calling `ctx.abort()` and returning (not falling through to sendUserMessage)
+- Tests verify abort handling and no regression on existing fetch_history/text prompt behavior
+- `cd hyper-pi-protocol && npm run build` passes
+- `cd pi-socket && npm test` passes (94+ tests)

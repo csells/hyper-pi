@@ -1,23 +1,23 @@
 {
   "id": "task-2",
-  "title": "Add Cancel Button to Stage Header",
+  "title": "Implement RemoteAgent.abort() in Pi-DE",
   "status": "done",
-  "depends_on": [
-    "task-1"
-  ],
-  "created_at": "2026-02-24T04:00:49.734Z",
-  "updated_at": "2026-02-24T04:06:07.040Z",
+  "depends_on": [],
+  "created_at": "2026-02-24T07:26:09.300Z",
+  "updated_at": "2026-02-24T07:30:17.531Z",
   "attempt_count": 1,
-  "started_at": "2026-02-24T04:00:49.777Z",
-  "base_commit": "d2dc76f2473b1daf896ca78db4d64f28662640ef",
-  "completed_at": "2026-02-24T04:06:07.040Z",
-  "summary": "Added cancel button (■) to stage header, visible only during streaming. Button calls remoteAgent.abort() on click. Implemented conditional rendering with matching danger-color styling and hover effects. Added 4 comprehensive tests verifying visibility, click behavior, and header layout preservation. All App tests passing (25/25).",
+  "started_at": "2026-02-24T07:26:09.353Z",
+  "base_commit": "163be23ed96075d1e82379dadbc7b1077ad40b82",
+  "completed_at": "2026-02-24T07:30:17.531Z",
+  "summary": "RemoteAgent.abort() implementation completed in commit f150d6a by SwiftDragon. Sends { type: 'abort' } JSON over WebSocket when connected, safely no-ops when disconnected, 3 comprehensive tests, AbortRequest type exported from types.ts, TODO.md updated. All 180 tests pass, build succeeds, no new linting errors introduced.",
   "evidence": {
     "commits": [
-      "0452e1d3feab74fe02d48ff9b101ab2ff1d0c670"
+      "f150d6a8f744a393e3cacba051cb4fb9acb5bddc"
     ],
     "tests": [
-      "npm test -- src/App.test.tsx"
+      "npm test — 180 tests pass",
+      "npm run build — succeeds",
+      "npm run lint — no new errors"
     ]
   }
 }

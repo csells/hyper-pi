@@ -5,6 +5,7 @@ import { useTheme } from "./useTheme";
 import SpawnModal from "./SpawnModal";
 import { patchMobileKeyboard } from "./patchMobileKeyboard";
 import { patchSendDuringStreaming } from "./patchSendDuringStreaming";
+import { Autocomplete } from "./Autocomplete";
 import { registerCompactToolRenderers } from "./toolRenderers";
 import type { NodeInfo } from "./types";
 
@@ -348,6 +349,8 @@ export default function App() {
                 {/* pi-web-ui AgentInterface web component */}
                 <div className={`agent-interface-container ${isDark ? "dark" : "light"}`}>
                   <agent-interface ref={agentInterfaceRef} />
+                  {/* Autocomplete for / commands and @ files */}
+                  <Autocomplete agent={agent.remoteAgent} container={agentInterfaceRef.current} />
                 </div>
               </>
             )}

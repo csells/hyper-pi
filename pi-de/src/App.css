@@ -813,6 +813,7 @@ body {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  position: relative; /* anchor for autocomplete popup */
 }
 
 .agent-interface-container agent-interface {

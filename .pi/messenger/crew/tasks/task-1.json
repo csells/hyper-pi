@@ -1,13 +1,21 @@
 {
   "id": "task-1",
-  "title": "Patch Send-During-Streaming and MessageEditor isStreaming Override",
+  "title": "Add abort wire protocol type and pi-socket abort handler",
   "status": "done",
   "depends_on": [],
-  "created_at": "2026-02-24T04:00:49.733Z",
-  "updated_at": "2026-02-24T04:11:36.615Z",
+  "created_at": "2026-02-24T07:26:09.299Z",
+  "updated_at": "2026-02-24T07:27:30.872Z",
   "attempt_count": 2,
-  "started_at": "2026-02-24T04:04:51.517Z",
-  "base_commit": "d2dc76f2473b1daf896ca78db4d64f28662640ef",
-  "completed_at": "2026-02-24T04:11:36.615Z",
-  "summary": "Created patchSendDuringStreaming.ts that patches AgentInterface.sendMessage to remove the isStreaming gate and overrides MessageEditor.isStreaming to always return false. 16 tests in patchSendDuringStreaming.test.ts. Integrated in App.tsx alongside the mobile keyboard patch. Build and all 135 tests pass."
+  "started_at": "2026-02-24T07:26:11.930Z",
+  "base_commit": "163be23ed96075d1e82379dadbc7b1077ad40b82",
+  "completed_at": "2026-02-24T07:27:30.872Z",
+  "summary": "Implemented abort wire protocol: Added AbortRequest type to hyper-pi-protocol, implemented abort handler in pi-socket that calls ctx.abort() when receiving { type: 'abort' } messages, added 2 tests verifying abort behavior. All 96 pi-socket tests pass, protocol build succeeds.",
+  "evidence": {
+    "commits": [
+      "f150d6a"
+    ],
+    "tests": [
+      "pi-socket: 96 tests pass (94 existing + 2 new abort tests)"
+    ]
+  }
 }

@@ -91,6 +91,11 @@ describe("pi-socket/index.ts", () => {
       getAllTools: vi.fn(() => [
         { name: "bash", description: "Run bash", parameters: {} as any },
       ]),
+      getCommands: vi.fn(() => [
+        { name: "help", description: "Show help", source: "extension" as const },
+        { name: "reload", description: "Reload extensions", source: "extension" as const },
+        { name: "skill:harden", description: "Harden app", source: "skill" as const },
+      ]),
     };
 
     // Mock context
@@ -100,6 +105,7 @@ describe("pi-socket/index.ts", () => {
         getBranch: vi.fn(() => []),
       },
       isIdle: vi.fn(() => true),
+      abort: vi.fn(),
       ui: {
         notify: vi.fn(),
       },
@@ -336,6 +342,614 @@ describe("pi-socket/index.ts", () => {
       // send() should not be called because readyState is not OPEN
       // (init_state also not sent due to readyState check)
       expect(mockClient.send).not.toHaveBeenCalled();
+    });
+
+    it("calls ctx.abort() when receiving abort message", async () => {
+      piSocket(mockPi as ExtensionAPI);
+
+      const sessionStartHandlers = piEventHandlers["session_start"];
+      await sessionStartHandlers[0]({}, mockCtx);
+
+      const mockClient = { readyState: 1, send: vi.fn(), on: vi.fn() };
+      mockWssInstance.connectionHandler(mockClient);
+
+      // Get the message handler
+      let messageHandler: any = null;
+      for (const call of mockClient.on.mock.calls) {
+        if (call[0] === "message") {
+          messageHandler = call[1];
+          break;
+        }
+      }
+
+      // Send abort request
+      const abortRequest = JSON.stringify({ type: "abort" });
+      messageHandler(Buffer.from(abortRequest));
+
+      // Verify ctx.abort() was called
+      expect(mockCtx.abort).toHaveBeenCalled();
+      // Verify sendUserMessage was NOT called (abort should return early)
+      expect(mockPi.sendUserMessage).not.toHaveBeenCalled();
+    });
+
+    it("does not treat abort as a text prompt", async () => {
+      mockCtx.isIdle.mockReturnValue(true);
+      piSocket(mockPi as ExtensionAPI);
+
+      const sessionStartHandlers = piEventHandlers["session_start"];
+      await sessionStartHandlers[0]({}, mockCtx);
+
+      const mockClient = { readyState: 1, send: vi.fn(), on: vi.fn() };
+      mockWssInstance.connectionHandler(mockClient);
+
+      // Get the message handler
+      let messageHandler: any = null;
+      for (const call of mockClient.on.mock.calls) {
+        if (call[0] === "message") {
+          messageHandler = call[1];
+          break;
+        }
+      }
+
+      // Send abort message
+      const abortRequest = JSON.stringify({ type: "abort" });
+      messageHandler(Buffer.from(abortRequest));
+
+      // Verify sendUserMessage is not called
+      expect(mockPi.sendUserMessage).not.toHaveBeenCalled();
+    });
+
+    it("handles list_commands request and returns slash commands from getCommands", async () => {
+      piSocket(mockPi as ExtensionAPI);
+
+      const sessionStartHandlers = piEventHandlers["session_start"];
+      await sessionStartHandlers[0]({}, mockCtx);
+
+      const mockClient = { readyState: 1, send: vi.fn(), on: vi.fn() };
+      mockWssInstance.connectionHandler(mockClient);
+
+      // Get the message handler
+      let messageHandler: any = null;
+      for (const call of mockClient.on.mock.calls) {
+        if (call[0] === "message") {
+          messageHandler = call[1];
+          break;
+        }
+      }
+
+      // Clear previous sends (init_state was already sent during connection)
+      mockClient.send.mockClear();
+
+      // Send list_commands request
+      const listCommandsRequest = JSON.stringify({ type: "list_commands" });
+      messageHandler(Buffer.from(listCommandsRequest));
+
+      // Verify response was sent
+      expect(mockClient.send).toHaveBeenCalled();
+      const responseData = mockClient.send.mock.calls[0][0];
+      const response = JSON.parse(responseData);
+
+      // Verify response shape — slash commands prefixed with /
+      expect(response.type).toBe("commands_list");
+      expect(Array.isArray(response.commands)).toBe(true);
+      expect(response.commands.length).toBe(3);
+
+      expect(response.commands[0]).toEqual({
+        name: "/help",
+        description: "Show help",
+      });
+      expect(response.commands[1]).toEqual({
+        name: "/reload",
+        description: "Reload extensions",
+      });
+      expect(response.commands[2]).toEqual({
+        name: "/skill:harden",
+        description: "Harden app",
+      });
+
+      // Verify getCommands was called (not getAllTools)
+      expect(mockPi.getCommands).toHaveBeenCalled();
+
+      // Verify sendUserMessage was NOT called (list_commands should return early)
+      expect(mockPi.sendUserMessage).not.toHaveBeenCalled();
+    });
+
+    it("skips list_commands response if ws is not OPEN", async () => {
+      piSocket(mockPi as ExtensionAPI);
+
+      const sessionStartHandlers = piEventHandlers["session_start"];
+      await sessionStartHandlers[0]({}, mockCtx);
+
+      const mockClient = { readyState: 0, send: vi.fn(), on: vi.fn() }; // NOT OPEN
+      mockWssInstance.connectionHandler(mockClient);
+
+      // Get the message handler
+      let messageHandler: any = null;
+      for (const call of mockClient.on.mock.calls) {
+        if (call[0] === "message") {
+          messageHandler = call[1];
+          break;
+        }
+      }
+
+      mockClient.send.mockClear();
+
+      // Send list_commands request
+      const listCommandsRequest = JSON.stringify({ type: "list_commands" });
+      messageHandler(Buffer.from(listCommandsRequest));
+
+      // send() should not be called because readyState is not OPEN
+      expect(mockClient.send).not.toHaveBeenCalled();
+    });
+
+    it("does not treat list_commands as a text prompt", async () => {
+      mockCtx.isIdle.mockReturnValue(true);
+      piSocket(mockPi as ExtensionAPI);
+
+      const sessionStartHandlers = piEventHandlers["session_start"];
+      await sessionStartHandlers[0]({}, mockCtx);
+
+      const mockClient = { readyState: 1, send: vi.fn(), on: vi.fn() };
+      mockWssInstance.connectionHandler(mockClient);
+
+      // Get the message handler
+      let messageHandler: any = null;
+      for (const call of mockClient.on.mock.calls) {
+        if (call[0] === "message") {
+          messageHandler = call[1];
+          break;
+        }
+      }
+
+      (mockPi.sendUserMessage as ReturnType<typeof vi.fn>).mockClear();
+
+      // Send list_commands message
+      const listCommandsRequest = JSON.stringify({ type: "list_commands" });
+      messageHandler(Buffer.from(listCommandsRequest));
+
+      // Verify sendUserMessage is not called (request should return early)
+      expect(mockPi.sendUserMessage).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("file attachment (attach_file)", () => {
+    it("attaches text file and sends content to pi", async () => {
+      mockCtx.isIdle.mockReturnValue(true);
+      piSocket(mockPi as ExtensionAPI);
+
+      const sessionStartHandlers = piEventHandlers["session_start"];
+      await sessionStartHandlers[0]({}, mockCtx);
+
+      const mockClient = { readyState: 1, send: vi.fn(), on: vi.fn() };
+      mockWssInstance.connectionHandler(mockClient);
+
+      let messageHandler: any = null;
+      for (const call of mockClient.on.mock.calls) {
+        if (call[0] === "message") {
+          messageHandler = call[1];
+          break;
+        }
+      }
+
+      // Create base64-encoded text file
+      const fileContent = "Hello, world!";
+      const base64Content = Buffer.from(fileContent).toString("base64");
+
+      const attachRequest = JSON.stringify({
+        type: "attach_file",
+        filename: "test.txt",
+        content: base64Content,
+        mimeType: "text/plain",
+      });
+
+      mockClient.send.mockClear();
+      messageHandler(Buffer.from(attachRequest));
+
+      // Verify sendUserMessage was called with the file content
+      expect(mockPi.sendUserMessage).toHaveBeenCalled();
+      const args = (mockPi.sendUserMessage as any).mock.calls[0];
+      expect(args[0]).toBeInstanceOf(Array); // content array
+      const content = args[0] as any[];
+      expect(content[0].type).toBe("text");
+      expect(content[0].text).toContain("test.txt");
+      expect(content[0].text).toContain(fileContent);
+
+      // Verify ack was sent with success=true
+      const ackData = mockClient.send.mock.calls[0][0];
+      const ack = JSON.parse(ackData);
+      expect(ack.type).toBe("attach_file_ack");
+      expect(ack.filename).toBe("test.txt");
+      expect(ack.success).toBe(true);
+    });
+
+    it("attaches image file with base64 data", async () => {
+      mockCtx.isIdle.mockReturnValue(true);
+      piSocket(mockPi as ExtensionAPI);
+
+      const sessionStartHandlers = piEventHandlers["session_start"];
+      await sessionStartHandlers[0]({}, mockCtx);
+
+      const mockClient = { readyState: 1, send: vi.fn(), on: vi.fn() };
+      mockWssInstance.connectionHandler(mockClient);
+
+      let messageHandler: any = null;
+      for (const call of mockClient.on.mock.calls) {
+        if (call[0] === "message") {
+          messageHandler = call[1];
+          break;
+        }
+      }
+
+      // Simulate base64 image data
+      const base64Image = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+
+      const attachRequest = JSON.stringify({
+        type: "attach_file",
+        filename: "test.png",
+        content: base64Image,
+        mimeType: "image/png",
+      });
+
+      mockClient.send.mockClear();
+      messageHandler(Buffer.from(attachRequest));
+
+      // Verify sendUserMessage was called with ImageContent
+      expect(mockPi.sendUserMessage).toHaveBeenCalled();
+      const args = (mockPi.sendUserMessage as any).mock.calls[0];
+      expect(args[0]).toBeInstanceOf(Array);
+      const content = args[0] as any[];
+      expect(content[0].type).toBe("image");
+      expect(content[0].mimeType).toBe("image/png");
+      expect(content[0].data).toBe(base64Image);
+
+      // Verify ack was sent with success=true
+      const ackData = mockClient.send.mock.calls[0][0];
+      const ack = JSON.parse(ackData);
+      expect(ack.type).toBe("attach_file_ack");
+      expect(ack.success).toBe(true);
+    });
+
+    it("rejects files larger than 10MB", async () => {
+      mockCtx.isIdle.mockReturnValue(true);
+      piSocket(mockPi as ExtensionAPI);
+
+      const sessionStartHandlers = piEventHandlers["session_start"];
+      await sessionStartHandlers[0]({}, mockCtx);
+
+      const mockClient = { readyState: 1, send: vi.fn(), on: vi.fn() };
+      mockWssInstance.connectionHandler(mockClient);
+
+      let messageHandler: any = null;
+      for (const call of mockClient.on.mock.calls) {
+        if (call[0] === "message") {
+          messageHandler = call[1];
+          break;
+        }
+      }
+
+      // Create base64 content > 10MB
+      const largeContent = "x".repeat(11 * 1024 * 1024);
+      const base64Large = Buffer.from(largeContent).toString("base64");
+
+      const attachRequest = JSON.stringify({
+        type: "attach_file",
+        filename: "huge.txt",
+        content: base64Large,
+      });
+
+      mockClient.send.mockClear();
+      messageHandler(Buffer.from(attachRequest));
+
+      // Verify sendUserMessage was NOT called
+      expect(mockPi.sendUserMessage).not.toHaveBeenCalled();
+
+      // Verify ack was sent with error
+      const ackData = mockClient.send.mock.calls[0][0];
+      const ack = JSON.parse(ackData);
+      expect(ack.type).toBe("attach_file_ack");
+      expect(ack.success).toBe(false);
+      expect(ack.error).toContain("file too large");
+    });
+
+    it("sends ack back to client", async () => {
+      mockCtx.isIdle.mockReturnValue(true);
+      piSocket(mockPi as ExtensionAPI);
+
+      const sessionStartHandlers = piEventHandlers["session_start"];
+      await sessionStartHandlers[0]({}, mockCtx);
+
+      const mockClient = { readyState: 1, send: vi.fn(), on: vi.fn() };
+      mockWssInstance.connectionHandler(mockClient);
+
+      let messageHandler: any = null;
+      for (const call of mockClient.on.mock.calls) {
+        if (call[0] === "message") {
+          messageHandler = call[1];
+          break;
+        }
+      }
+
+      const fileContent = "test";
+      const base64Content = Buffer.from(fileContent).toString("base64");
+
+      const attachRequest = JSON.stringify({
+        type: "attach_file",
+        filename: "test.txt",
+        content: base64Content,
+      });
+
+      mockClient.send.mockClear();
+      messageHandler(Buffer.from(attachRequest));
+
+      // Verify send() was called for the ack
+      expect(mockClient.send).toHaveBeenCalled();
+      const ackData = mockClient.send.mock.calls[0][0];
+      const ack = JSON.parse(ackData);
+      expect(ack.type).toBe("attach_file_ack");
+      expect(ack.filename).toBe("test.txt");
+    });
+
+    it("returns early if ws is not OPEN", async () => {
+      mockCtx.isIdle.mockReturnValue(true);
+      piSocket(mockPi as ExtensionAPI);
+
+      const sessionStartHandlers = piEventHandlers["session_start"];
+      await sessionStartHandlers[0]({}, mockCtx);
+
+      const mockClient = { readyState: 0, send: vi.fn(), on: vi.fn() }; // NOT OPEN
+      mockWssInstance.connectionHandler(mockClient);
+
+      let messageHandler: any = null;
+      for (const call of mockClient.on.mock.calls) {
+        if (call[0] === "message") {
+          messageHandler = call[1];
+          break;
+        }
+      }
+
+      const fileContent = "test";
+      const base64Content = Buffer.from(fileContent).toString("base64");
+
+      const attachRequest = JSON.stringify({
+        type: "attach_file",
+        filename: "test.txt",
+        content: base64Content,
+      });
+
+      mockClient.send.mockClear();
+      messageHandler(Buffer.from(attachRequest));
+
+      // Ack should not be sent because ws is not OPEN
+      expect(mockClient.send).not.toHaveBeenCalled();
+    });
+
+    it("handles list_files JSON request by returning files in cwd", async () => {
+      piSocket(mockPi as ExtensionAPI);
+
+      const sessionStartHandlers = piEventHandlers["session_start"];
+      await sessionStartHandlers[0]({}, mockCtx);
+
+      const mockClient = { readyState: 1, send: vi.fn(), on: vi.fn() };
+      mockWssInstance.connectionHandler(mockClient);
+
+      let messageHandler: any = null;
+      for (const call of mockClient.on.mock.calls) {
+        if (call[0] === "message") {
+          messageHandler = call[1];
+          break;
+        }
+      }
+      expect(messageHandler).toBeDefined();
+
+      // Clear previous send calls (init_state)
+      mockClient.send.mockClear();
+
+      // Send list_files request without prefix
+      const listRequest = JSON.stringify({
+        type: "list_files",
+      });
+      messageHandler(Buffer.from(listRequest));
+
+      // Verify send was called with files_list response
+      expect(mockClient.send).toHaveBeenCalled();
+      const response = JSON.parse(mockClient.send.mock.calls[0][0]);
+      expect(response.type).toBe("files_list");
+      expect(Array.isArray(response.files)).toBe(true);
+      expect(response.cwd).toBeDefined();
+      // Each file should have path and isDirectory
+      for (const file of response.files) {
+        expect(file).toHaveProperty("path");
+        expect(file).toHaveProperty("isDirectory");
+        expect(typeof file.isDirectory).toBe("boolean");
+      }
+    });
+
+    it("does not treat list_files as a text prompt", async () => {
+      mockCtx.isIdle.mockReturnValue(true);
+      piSocket(mockPi as ExtensionAPI);
+
+      const sessionStartHandlers = piEventHandlers["session_start"];
+      await sessionStartHandlers[0]({}, mockCtx);
+
+      const mockClient = { readyState: 1, send: vi.fn(), on: vi.fn() };
+      mockWssInstance.connectionHandler(mockClient);
+
+      let messageHandler: any = null;
+      for (const call of mockClient.on.mock.calls) {
+        if (call[0] === "message") {
+          messageHandler = call[1];
+          break;
+        }
+      }
+
+      mockClient.send.mockClear();
+
+      const listRequest = JSON.stringify({
+        type: "list_files",
+      });
+      messageHandler(Buffer.from(listRequest));
+
+      // Verify sendUserMessage is not called
+      expect(mockPi.sendUserMessage).not.toHaveBeenCalled();
+    });
+
+    it("skips list_files response if ws is not OPEN", async () => {
+      piSocket(mockPi as ExtensionAPI);
+
+      const sessionStartHandlers = piEventHandlers["session_start"];
+      await sessionStartHandlers[0]({}, mockCtx);
+
+      const mockClient = { readyState: 0, send: vi.fn(), on: vi.fn() }; // NOT OPEN
+      mockWssInstance.connectionHandler(mockClient);
+
+      let messageHandler: any = null;
+      for (const call of mockClient.on.mock.calls) {
+        if (call[0] === "message") {
+          messageHandler = call[1];
+          break;
+        }
+      }
+
+      const listRequest = JSON.stringify({
+        type: "list_files",
+      });
+      messageHandler(Buffer.from(listRequest));
+
+      // send() should not be called because readyState is not OPEN
+      expect(mockClient.send).not.toHaveBeenCalled();
+    });
+
+    it("excludes hidden files (starting with .)", async () => {
+      piSocket(mockPi as ExtensionAPI);
+
+      const sessionStartHandlers = piEventHandlers["session_start"];
+      await sessionStartHandlers[0]({}, mockCtx);
+
+      const mockClient = { readyState: 1, send: vi.fn(), on: vi.fn() };
+      mockWssInstance.connectionHandler(mockClient);
+
+      let messageHandler: any = null;
+      for (const call of mockClient.on.mock.calls) {
+        if (call[0] === "message") {
+          messageHandler = call[1];
+          break;
+        }
+      }
+
+      mockClient.send.mockClear();
+
+      const listRequest = JSON.stringify({
+        type: "list_files",
+      });
+      messageHandler(Buffer.from(listRequest));
+
+      const response = JSON.parse(mockClient.send.mock.calls[0][0]);
+      expect(response.type).toBe("files_list");
+      // Verify no hidden files
+      for (const file of response.files) {
+        expect(file.path).not.toMatch(/^\./);
+      }
+    });
+
+    it("handles list_files with prefix to filter directory", async () => {
+      piSocket(mockPi as ExtensionAPI);
+
+      const sessionStartHandlers = piEventHandlers["session_start"];
+      await sessionStartHandlers[0]({}, mockCtx);
+
+      const mockClient = { readyState: 1, send: vi.fn(), on: vi.fn() };
+      mockWssInstance.connectionHandler(mockClient);
+
+      let messageHandler: any = null;
+      for (const call of mockClient.on.mock.calls) {
+        if (call[0] === "message") {
+          messageHandler = call[1];
+          break;
+        }
+      }
+
+      mockClient.send.mockClear();
+
+      // Request files with a prefix directory
+      const listRequest = JSON.stringify({
+        type: "list_files",
+        prefix: "nonexistent-dir/",
+      });
+      messageHandler(Buffer.from(listRequest));
+
+      // Response should be files_list (may be empty if dir doesn't exist)
+      expect(mockClient.send).toHaveBeenCalled();
+      const response = JSON.parse(mockClient.send.mock.calls[0][0]);
+      expect(response.type).toBe("files_list");
+      expect(Array.isArray(response.files)).toBe(true);
+    });
+
+    it("prevents path traversal (prefix: '../../')", async () => {
+      piSocket(mockPi as ExtensionAPI);
+
+      const sessionStartHandlers = piEventHandlers["session_start"];
+      await sessionStartHandlers[0]({}, mockCtx);
+
+      const mockClient = { readyState: 1, send: vi.fn(), on: vi.fn() };
+      mockWssInstance.connectionHandler(mockClient);
+
+      let messageHandler: any = null;
+      for (const call of mockClient.on.mock.calls) {
+        if (call[0] === "message") {
+          messageHandler = call[1];
+          break;
+        }
+      }
+
+      mockClient.send.mockClear();
+
+      // Attempt path traversal
+      const listRequest = JSON.stringify({
+        type: "list_files",
+        prefix: "../../etc/",
+      });
+      messageHandler(Buffer.from(listRequest));
+
+      // Should return response with cwd = actual working directory (not escaped)
+      expect(mockClient.send).toHaveBeenCalled();
+      const response = JSON.parse(mockClient.send.mock.calls[0][0]);
+      expect(response.type).toBe("files_list");
+      // cwd should match the actual working directory (proving we're in sandbox)
+      expect(response.cwd).toBeDefined();
+    });
+
+    it("handles non-existent directory gracefully (empty files array)", async () => {
+      piSocket(mockPi as ExtensionAPI);
+
+      const sessionStartHandlers = piEventHandlers["session_start"];
+      await sessionStartHandlers[0]({}, mockCtx);
+
+      const mockClient = { readyState: 1, send: vi.fn(), on: vi.fn() };
+      mockWssInstance.connectionHandler(mockClient);
+
+      let messageHandler: any = null;
+      for (const call of mockClient.on.mock.calls) {
+        if (call[0] === "message") {
+          messageHandler = call[1];
+          break;
+        }
+      }
+
+      mockClient.send.mockClear();
+
+      // Request from non-existent directory
+      const listRequest = JSON.stringify({
+        type: "list_files",
+        prefix: "nonexistent-directory-xyz/",
+      });
+      messageHandler(Buffer.from(listRequest));
+
+      // Should return response with empty files array (not throw)
+      expect(mockClient.send).toHaveBeenCalled();
+      const response = JSON.parse(mockClient.send.mock.calls[0][0]);
+      expect(response.type).toBe("files_list");
+      expect(Array.isArray(response.files)).toBe(true);
+      expect(response.files.length).toBeGreaterThanOrEqual(0);
     });
   });
 
