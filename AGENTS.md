@@ -52,6 +52,16 @@ thinking sections, and tool cards — identical to pi's own web UI.
 Everything is additive — a global extension, an external daemon, and an external
 web app.
 
+### The hypivisor can NEVER take down a pi agent
+
+This is the most important architectural invariant. The hypivisor is an
+**observe-only** monitoring layer. If it crashes, is killed (SIGKILL), or
+becomes unreachable, every pi agent MUST continue running with zero impact.
+The local WebSocket server, event broadcasting, message injection, and all
+agent functionality continue normally. Only dashboard visibility is lost.
+See `specs/design.md` § "Agent Resilience Invariant" and requirements
+R-PS-18a, R-PS-18b, R-CC-4, R-CC-10.
+
 ### Multiple agents per directory is a FIRST-CLASS use case
 
 **Users can run THOUSANDS of pi agents in the same project folder.** This is not

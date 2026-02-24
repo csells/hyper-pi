@@ -235,6 +235,12 @@ export default function piSocket(pi: ExtensionAPI) {
     reconnectDelay = 0;
   }
 
+  /**
+   * Connect to the hypivisor for registry/monitoring. This connection is
+   * strictly OPTIONAL — if the hypivisor is unreachable, crashes, or is
+   * killed, the pi agent MUST continue operating normally. Only the
+   * dashboard loses visibility into this agent.
+   */
   function connectToHypivisor(port: number): void {
     if (!hypivisorUrlValid || shutdownRequested) return;
 
@@ -280,7 +286,14 @@ export default function piSocket(pi: ExtensionAPI) {
       }, 30_000);
     }));
 
-    ws.on("close", () => {
+    // ── CRITICAL INVARIANT ──────────────────────────────────────
+    // The hypivisor is an OPTIONAL monitoring layer. If it crashes,
+    // becomes unreachable, or is killed, the pi agent process MUST
+    // continue running unaffected. These handlers are wrapped in
+    // boundary() so that even an unanticipated error in close/error
+    // handling can NEVER propagate to the pi host process.
+    // ─────────────────────────────────────────────────────────────
+    ws.on("close", boundary("hypivisor.close", () => {
       if (heartbeatInterval) { clearInterval(heartbeatInterval); heartbeatInterval = null; }
       const wasConnected = hypivisorConnected;
       hypivisorConnected = false;
@@ -290,11 +303,11 @@ export default function piSocket(pi: ExtensionAPI) {
         log.warn("hypivisor", "connection attempt failed, will retry");
       }
       scheduleReconnect(port);
-    });
+    }));
 
-    ws.on("error", (err) => {
+    ws.on("error", boundary("hypivisor.error", (err: Error) => {
       log.warn("hypivisor", "connection error", { error: String(err) });
-    });
+    }));
   }
 
   function scheduleReconnect(port: number): void {

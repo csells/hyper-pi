@@ -549,4 +549,137 @@ describe("pi-socket/index.ts", () => {
       expect(onCalls).toContain("error");
     });
   });
+
+  // ────────────────────────────────────────────────────────────
+  // CRITICAL INVARIANT: Hypivisor crash MUST NOT affect pi agent
+  // ────────────────────────────────────────────────────────────
+  describe("Hypivisor crash resilience", () => {
+    it("hypivisor close handler does not throw or crash the agent", async () => {
+      piSocket(mockPi as ExtensionAPI);
+
+      const sessionStartHandlers = piEventHandlers["session_start"];
+      await sessionStartHandlers[0]({}, mockCtx);
+
+      // Simulate hypivisor open (sets hypivisorConnected = true)
+      mockHypivisorWsInstance.openHandler();
+
+      // Simulate hypivisor crash (close event fires)
+      expect(() => {
+        mockHypivisorWsInstance.closeHandler();
+      }).not.toThrow();
+    });
+
+    it("hypivisor error handler does not throw or crash the agent", async () => {
+      piSocket(mockPi as ExtensionAPI);
+
+      const sessionStartHandlers = piEventHandlers["session_start"];
+      await sessionStartHandlers[0]({}, mockCtx);
+
+      // Simulate a WebSocket error (e.g. ECONNRESET from hypivisor kill -9)
+      expect(() => {
+        mockHypivisorWsInstance.errorHandler(new Error("read ECONNRESET"));
+      }).not.toThrow();
+    });
+
+    it("local WSS still accepts clients after hypivisor disconnects", async () => {
+      piSocket(mockPi as ExtensionAPI);
+
+      const sessionStartHandlers = piEventHandlers["session_start"];
+      await sessionStartHandlers[0]({}, mockCtx);
+
+      // Connect hypivisor then kill it
+      mockHypivisorWsInstance.openHandler();
+      mockHypivisorWsInstance.closeHandler();
+
+      // Local WSS connection handler should still work
+      const mockClient = { readyState: 1, send: vi.fn(), on: vi.fn() };
+      expect(() => {
+        mockWssInstance.connectionHandler(mockClient);
+      }).not.toThrow();
+
+      // Should still send init_state
+      expect(mockClient.send).toHaveBeenCalled();
+      const parsed = JSON.parse(mockClient.send.mock.calls[0][0]);
+      expect(parsed.type).toBe("init_state");
+    });
+
+    it("event broadcasting continues after hypivisor disconnect", async () => {
+      piSocket(mockPi as ExtensionAPI);
+
+      const sessionStartHandlers = piEventHandlers["session_start"];
+      await sessionStartHandlers[0]({}, mockCtx);
+
+      // Connect hypivisor then kill it
+      mockHypivisorWsInstance.openHandler();
+      mockHypivisorWsInstance.closeHandler();
+
+      // Add a connected client to WSS
+      const mockClient = { readyState: 1, send: vi.fn() };
+      mockWssInstance.clients = new Set([mockClient]);
+
+      // Broadcast should still work
+      const messageStartHandlers = piEventHandlers["message_start"];
+      expect(() => {
+        messageStartHandlers[0]({ type: "message_start", role: "assistant" });
+      }).not.toThrow();
+
+      expect(mockClient.send).toHaveBeenCalled();
+      const parsed = JSON.parse(mockClient.send.mock.calls[0][0]);
+      expect(parsed.type).toBe("message_start");
+    });
+
+    it("sendUserMessage still works after hypivisor disconnect", async () => {
+      mockCtx.isIdle.mockReturnValue(true);
+      piSocket(mockPi as ExtensionAPI);
+
+      const sessionStartHandlers = piEventHandlers["session_start"];
+      await sessionStartHandlers[0]({}, mockCtx);
+
+      // Connect hypivisor then kill it
+      mockHypivisorWsInstance.openHandler();
+      mockHypivisorWsInstance.closeHandler();
+
+      // Client sends a message — should still reach pi
+      const mockClient = { readyState: 1, send: vi.fn(), on: vi.fn() };
+      mockWssInstance.connectionHandler(mockClient);
+
+      const messageHandler = mockClient.on.mock.calls[0][1];
+      messageHandler(Buffer.from("message after hypivisor crash"));
+
+      expect(mockPi.sendUserMessage).toHaveBeenCalledWith(
+        "message after hypivisor crash",
+      );
+    });
+
+    it("hypivisor error + close in sequence does not crash", async () => {
+      piSocket(mockPi as ExtensionAPI);
+
+      const sessionStartHandlers = piEventHandlers["session_start"];
+      await sessionStartHandlers[0]({}, mockCtx);
+
+      mockHypivisorWsInstance.openHandler();
+
+      // Real SIGKILL sequence: error fires, then close fires
+      expect(() => {
+        mockHypivisorWsInstance.errorHandler(new Error("read ECONNRESET"));
+        mockHypivisorWsInstance.closeHandler();
+      }).not.toThrow();
+    });
+
+    it("repeated hypivisor connect/disconnect cycles do not crash", async () => {
+      piSocket(mockPi as ExtensionAPI);
+
+      const sessionStartHandlers = piEventHandlers["session_start"];
+      await sessionStartHandlers[0]({}, mockCtx);
+
+      // Simulate 5 rapid connect/disconnect cycles
+      for (let i = 0; i < 5; i++) {
+        expect(() => {
+          mockHypivisorWsInstance.openHandler();
+          mockHypivisorWsInstance.errorHandler(new Error("connection lost"));
+          mockHypivisorWsInstance.closeHandler();
+        }).not.toThrow();
+      }
+    });
+  });
 });

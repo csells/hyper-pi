@@ -51,6 +51,22 @@ Events broadcast from pi-socket to connected clients:
 
 The `toolcall_start`/`toolcall_delta` events fire DURING the assistant message (before `message_end`). The `tool_start`/`tool_end` events fire AFTER `message_end` for tool execution. This distinction is critical for Pi-DE's `RemoteAgent` to correctly maintain streaming state.
 
+## Critical invariant: agent independence from hypivisor
+
+**The hypivisor can NEVER take down a pi agent.** If the hypivisor crashes,
+is killed (SIGKILL), or becomes unreachable, the pi agent MUST continue
+running with zero impact. The local WebSocket server, event broadcasting,
+message handling — everything continues normally. Only dashboard visibility
+is lost until the agent reconnects.
+
+All hypivisor-related WebSocket handlers (`open`, `close`, `error`) MUST be
+wrapped in `boundary()`. Never gate agent functionality on `hypivisorConnected`.
+Never add code where a hypivisor failure could affect the local WSS.
+
+Integration tests in `integration-tests/src/hypivisor-resilience.test.ts`
+verify this invariant by killing the hypivisor with SIGKILL and confirming
+the mock agent's local WSS continues serving clients.
+
 ## Error handling
 
 pi-socket runs inside pi's Node.js process. An uncaught exception kills pi.

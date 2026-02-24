@@ -54,6 +54,8 @@ The default hypivisor port (31415) is a reference to π (3.1415…).
 - **R-PS-16:** If the hypivisor WebSocket connection drops, the extension MUST automatically attempt to reconnect every 5 seconds.
 - **R-PS-17:** The node ID MUST be generated once at `pi` startup and reused across all reconnection attempts. This ensures the hypivisor updates the existing node entry rather than creating a duplicate on reconnect.
 - **R-PS-18:** Network disconnections MUST NOT affect the running `pi` agent process in any way—no context loss, no state corruption, no process termination.
+- **R-PS-18a:** If the hypivisor process crashes, is killed (including `SIGKILL`), or becomes unreachable for any reason, the pi agent MUST continue running completely unaffected. The local WebSocket server MUST remain operational for direct client connections. All pi.on() event handlers, tool execution, and LLM conversations MUST proceed as if the hypivisor never existed. The only impact is loss of dashboard visibility until the agent reconnects. **This is a non-negotiable invariant — the hypivisor can NEVER take down a pi agent.**
+- **R-PS-18b:** All hypivisor WebSocket event handlers (`open`, `close`, `error`) MUST be wrapped in the `boundary()` safety net so that no exception from hypivisor-related code can propagate to the pi host process.
 - **R-PS-19:** On `pi` exit (the `session_shutdown` event), the extension MUST close the local WebSocket server. The hypivisor connection will drop naturally.
 
 ### 1.4 Configuration
@@ -201,7 +203,7 @@ The default hypivisor port (31415) is a reference to π (3.1415…).
 
 ### 4.2 Standalone Mode
 - **R-CC-3:** pi-socket MUST be fully functional without a running hypivisor. Any client can connect directly to the agent's local WebSocket port.
-- **R-CC-4:** The hypivisor is an optional enhancement, not a dependency.
+- **R-CC-4:** The hypivisor is an optional enhancement, not a dependency. A pi agent that started with a working hypivisor MUST survive the hypivisor's death with zero impact to its operation. The relationship is strictly observe-only — the hypivisor observes agents, it does not control them.
 
 ### 4.3 Multi-Machine Support
 - **R-CC-5:** The hypivisor MUST bind to `0.0.0.0` (all network interfaces) to support remote agent registrations.
@@ -211,7 +213,7 @@ The default hypivisor port (31415) is a reference to π (3.1415…).
 
 ### 4.4 Graceful Degradation
 - **R-CC-9:** If the hypivisor crashes or becomes unreachable while Pi-DE is open, Pi-DE MUST continue to function for any already-connected agent sessions. Only the roster and spawn capabilities are lost.
-- **R-CC-10:** If pi-socket loses its hypivisor connection, the local WebSocket server for direct client connections MUST continue operating normally.
+- **R-CC-10:** If pi-socket loses its hypivisor connection (including hypivisor crash or SIGKILL), the local WebSocket server for direct client connections MUST continue operating normally. Event broadcasting to local clients, message injection via `sendUserMessage`, and all pi agent functionality MUST be completely unaffected. The agent MUST automatically re-register when the hypivisor becomes available again.
 
 ### 4.5 Multi-Client Behavior
 - **R-CC-11:** Multiple Pi-DE tabs/browsers MAY connect to the same hypivisor simultaneously. Each receives the same event stream.

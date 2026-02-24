@@ -848,6 +848,47 @@ Machine A (laptop)              Machine B (cloud server)
 
 ---
 
+## Agent Resilience Invariant
+
+**The hypivisor can NEVER take down a pi agent.** This is the single most important architectural invariant in Hyper-Pi.
+
+### The Rule
+
+The hypivisor is an **observe-only** monitoring layer. It watches agents — it does not control them. If the hypivisor crashes, is killed (`SIGKILL`), loses power, or becomes unreachable for any reason:
+
+1. **Every running pi agent continues operating normally** — no context loss, no state corruption, no process termination.
+2. **The local WebSocket server (pi-socket) continues serving clients** — direct connections to `ws://agent:port` work exactly as before.
+3. **Event broadcasting continues** — all connected Pi-DE clients and direct WebSocket clients receive events.
+4. **Message injection continues** — clients can still send messages via WebSocket.
+5. **The agent automatically re-registers** when the hypivisor becomes available again.
+
+The **only** impact of a hypivisor crash is loss of dashboard roster visibility. Agents become invisible to Pi-DE, but they are not affected.
+
+### Implementation
+
+pi-socket enforces this invariant through two layers:
+
+1. **Architectural isolation**: The hypivisor WebSocket client and the local WebSocket server are independent subsystems. They share no state that could corrupt if one fails. The hypivisor client is a fire-and-forget registration channel.
+
+2. **Defense-in-depth error containment**: Every hypivisor-related WebSocket handler (`open`, `close`, `error`) is wrapped in `boundary()` — the outer safety net that catches unanticipated exceptions and logs them to the hardening log. No error from the hypivisor connection path can propagate to the pi host process.
+
+### What This Means for Development
+
+- **Never** add code where a hypivisor connection failure could affect local WSS operation.
+- **Never** gate agent functionality (tool execution, message handling, event broadcasting) on `hypivisorConnected` state.
+- **Always** wrap hypivisor-related callbacks in `boundary()`.
+- **Always** test that the local WSS survives hypivisor `SIGKILL` (integration test: `hypivisor-resilience.test.ts`).
+
+### Requirements
+
+- R-PS-18: Network disconnections MUST NOT affect the running pi agent.
+- R-PS-18a: Hypivisor crash MUST NOT crash the agent.
+- R-PS-18b: All hypivisor handlers MUST be wrapped in `boundary()`.
+- R-CC-4: The hypivisor is optional, not a dependency.
+- R-CC-10: Local WSS continues after hypivisor loss.
+
+---
+
 ## Error Handling Summary
 
 ### Pi-DE → Hypivisor
