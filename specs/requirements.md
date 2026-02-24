@@ -191,7 +191,9 @@ The default hypivisor port (31415) is a reference to π (3.1415…).
 ### 3.7 Technology
 - **R-UI-33:** Pi-DE MUST be built with React and Vite.
 - **R-UI-34:** Pi-DE MUST use `@mariozechner/pi-web-ui` components where available (ChatPanel, ThemeProvider).
-- **R-UI-35:** Pi-DE MUST use a dark theme consistent with terminal aesthetics.
+- **R-UI-35:** Pi-DE MUST support multiple themes selectable via a dropdown in the sidebar. The selected theme MUST persist to localStorage across sessions. At minimum, dark and light variants MUST be available.
+- **R-UI-35a:** Themes MUST map pi's TUI color tokens (accent, border, success, error, tool backgrounds, syntax highlighting, etc.) to the web UI's CSS custom properties (mini-lit oklch format) so the web UI renders with colors matching the selected pi theme.
+- **R-UI-35b:** Pi-DE MUST register compact tool renderers for pi-coding-agent's built-in tools (`read`, `write`, `edit`, `bash`, `ls`, `find`, `grep`) via pi-web-ui's `registerToolRenderer()` API. Each renderer MUST display a compact one-line header (tool name + key arguments) with collapsible content, matching the TUI's information density. Custom/extension tools MUST fall through to the default renderer.
 
 ---
 

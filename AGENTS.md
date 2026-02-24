@@ -100,8 +100,8 @@ Tests are measured with actual coverage tools (`cargo tarpaulin` for Rust,
 | Component         | Tests                          | Line Coverage              |
 | ----------------- | ------------------------------ | -------------------------- |
 | hypivisor         | 109 (91 unit + 18 integration) | **81%**                    |
-| pi-socket         | 44                             | 73%                        |
-| Pi-DE             | 59                             | **89%**                    |
+| pi-socket         | 87                             | 73%                        |
+| Pi-DE             | 174                            | **89%**                    |
 | integration-tests | 51                             | (exercises all components) |
 
 The integration tests (`integration-tests/`) spawn real pi agents in tmux

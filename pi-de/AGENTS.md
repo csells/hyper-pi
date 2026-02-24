@@ -21,13 +21,16 @@ npm test        # Run vitest unit tests
 
 | File | Purpose |
 |------|---------|
-| `src/App.tsx` | Root component. Wires `RemoteAgent` into `<agent-interface>`. Patches `sendMessage` and `MessageEditor` to allow sending while agent is busy. |
+| `src/App.tsx` | Root component. Wires `RemoteAgent` into `<agent-interface>`. Registers compact tool renderers. Patches `sendMessage` and `MessageEditor` to allow sending while agent is busy. |
 | `src/RemoteAgent.ts` | **Core adapter.** Duck-types pi-agent-core's `Agent` interface over WebSocket. Handles socket events (`delta`, `thinking_delta`, `toolcall_start`, `toolcall_delta`, `tool_start`, `tool_end`, `message_start`, `message_end`), maintains `AgentState`, emits `AgentEvent`s. |
 | `src/useHypivisor.ts` | Hook: connects to hypivisor WebSocket, manages node roster via push events. |
 | `src/useAgent.ts` | Hook: connects to agent via hypivisor proxy (`/ws/agent/{nodeId}`), creates `RemoteAgent`. |
 | `src/types.ts` | WebSocket event types, node info, hypivisor events. |
 | `src/patchLit.ts` | Fixes Lit class-field-shadowing in dev mode. Patches `ReactiveElement.performUpdate`. |
 | `src/initStorage.ts` | In-memory `AppStorage` with `MemoryBackend` and dummy API keys for all providers. |
+| `src/piThemes.ts` | Pi theme definitions (7 themes), hex→oklch conversion, CSS custom property application. |
+| `src/useTheme.ts` | React hook for theme selection. Persists to localStorage, applies via `applyPiTheme()`. |
+| `src/toolRenderers.ts` | Compact TUI-style tool renderers for read/write/edit/bash/ls/find/grep. Registered at startup via `registerToolRenderer()`. |
 | `vite.config.ts` | Vite config. Excludes Node-only packages from pre-bundling. `katexFontsPlugin()` middleware for font redirects. |
 
 ## Architecture

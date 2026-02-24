@@ -395,7 +395,7 @@ The PSK (`HYPI_TOKEN`) provides identity verification, not encryption. It preven
 
 **Technology:** React 18+ / Vite / TypeScript / `@mariozechner/pi-web-ui`
 
-**Theme:** Dark, terminal-aesthetic (near-black backgrounds, emerald accents, monospace metadata)
+**Theme:** 7 built-in themes (dark, light, gruvbox-dark, tokyo-night, nord, solarized-dark, solarized-light) with full pi color token mapping to CSS custom properties. Users select from a dropdown in the sidebar; choice persists to localStorage. See "Theming" section below.
 
 #### Layout
 
@@ -915,6 +915,81 @@ pi-socket enforces this invariant through two layers:
 | Initial connection fails | `ctx.ui.notify()` standalone mode message. Retry loop runs in background. |
 | Connection drops | Retry every 5s. Local WS server unaffected. No impact on pi or terminal TUI. |
 | Reconnection succeeds | Re-register with same node ID. |
+
+---
+
+## Theming
+
+Pi-DE supports 7 built-in themes that map pi's TUI color tokens to the web UI's CSS custom properties.
+
+### Architecture
+
+Pi's TUI themes define 51 color tokens as hex strings (accent, border, success, error, tool backgrounds, syntax highlighting, etc.). The web UI (`@mariozechner/mini-lit`) uses ~30 CSS custom properties in oklch color space. The bridge:
+
+1. **`piThemes.ts`** — Embeds theme definitions with all 51 pi color tokens
+2. **`hexToOklch()`** — Runtime hex→oklch conversion for mini-lit compatibility
+3. **`applyPiTheme()`** — Sets CSS custom properties on `document.documentElement`
+4. **`useTheme()`** — React hook exposing theme state, persisted to localStorage
+
+### Available Themes
+
+| Theme | Variant | Description |
+|-------|---------|-------------|
+| Dark | dark | Pi's default dark theme |
+| Light | light | Pi's default light theme |
+| Gruvbox Dark | dark | Retro warm palette |
+| Tokyo Night | dark | Blue-purple palette |
+| Nord | dark | Arctic blue-gray palette |
+| Solarized Dark | dark | Teal on dark |
+| Solarized Light | light | Teal on cream |
+
+### CSS Custom Property Mapping
+
+Pi tokens map to mini-lit properties:
+
+| Pi Token | CSS Property |
+|----------|-------------|
+| `pageBg` | `--background` |
+| `pageFg` | `--foreground` |
+| `cardBg` | `--card` |
+| `accent` | `--primary`, `--sidebar-primary` |
+| `selectedBg` | `--secondary`, `--accent` |
+| `borderMuted` | `--muted`, `--border`, `--input` |
+| `muted` | `--muted-foreground` |
+| `error` | `--destructive` |
+| `border` | `--ring`, `--sidebar-ring` |
+
+Pi-DE also sets `--pi-*` custom properties (e.g., `--pi-accent`, `--pi-success`, `--pi-error`) for sidebar chrome styling that doesn't map to mini-lit.
+
+---
+
+## Compact Tool Renderers
+
+Pi-DE registers custom `ToolRenderer` implementations via pi-web-ui's `registerToolRenderer()` API to replace the generic `DefaultRenderer` ("Tool Call / Input JSON / Output text" cards) with compact, TUI-style rendering.
+
+### Motivation
+
+pi-web-ui ships a `DefaultRenderer` that renders all unregistered tools as verbose JSON cards. Pi's TUI renders each built-in tool with a compact, tool-aware format (e.g., `read ~/path:225-304` with syntax-highlighted code). The web UI's `registerToolRenderer()` API exists for consuming apps to register their own renderers.
+
+### Registered Renderers
+
+| Tool | Header Format | Content |
+|------|--------------|---------|
+| `read` | `read ~/path/to/file.ts:225-304` | Syntax-highlighted code block, collapsible |
+| `write` | `write ~/path/to/file.ts` | File content preview, collapsible |
+| `edit` | `edit ~/path/to/file.ts` | Old/new text diff, collapsible |
+| `bash` | `$ command` | Console output, collapsible |
+| `ls` | `ls src/` | File listing, collapsible |
+| `find` | `find *.ts in src/` | Search results, collapsible |
+| `grep` | `grep /pattern/ in src/` | Match results, collapsible |
+
+All renderers use `renderCollapsibleHeader()` from pi-web-ui with tool-appropriate lucide icons. Content is truncated to a preview (10 lines for code, 20 for listings, 15 for grep) with "… (N more lines)" indicators.
+
+Custom/extension tools (e.g., `pi_messenger`, `web_search`) fall through to the `DefaultRenderer`.
+
+### Implementation
+
+`toolRenderers.ts` defines all renderer classes and exports `registerCompactToolRenderers()`, called once at module scope in `App.tsx` before any `<agent-interface>` renders.
 
 ---
 

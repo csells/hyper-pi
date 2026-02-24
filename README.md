@@ -72,7 +72,9 @@ Pi-DE (browser)
   └─ ws://hypivisor:31415/ws/agent/… → proxy → pi-socket → pi
 ```
 
-Pi-DE connects only to the hypivisor. The hypivisor proxies agent WebSocket connections bidirectionally. pi-socket runs inside each pi process, broadcasting real-time events: streaming text, thinking, tool calls (with inline rendering via pi-web-ui's tool renderers), and user messages. Pi-DE's `RemoteAgent` adapter translates these into pi-web-ui's `AgentEvent` interface.
+Pi-DE connects only to the hypivisor. The hypivisor proxies agent WebSocket connections bidirectionally. pi-socket runs inside each pi process, broadcasting real-time events: streaming text, thinking, tool calls, and user messages. Pi-DE's `RemoteAgent` adapter translates these into pi-web-ui's `AgentEvent` interface.
+
+Pi-DE registers compact tool renderers for pi's built-in tools (`read`, `write`, `edit`, `bash`, `ls`, `find`, `grep`) that match the TUI's information density — one-line headers with collapsible content instead of verbose JSON cards. It also supports 7 themes (dark, light, gruvbox-dark, tokyo-night, nord, solarized-dark, solarized-light) that map pi's color tokens to CSS custom properties.
 
 See [specs/](specs/) for the full design:
 
@@ -140,17 +142,17 @@ The ledger is version-controlled so the skill learns over time — it knows what
 
 ```bash
 # Unit tests
-cd pi-socket && npm test       # 44 tests
-cd pi-de && npm test           # 59 tests
+cd pi-socket && npm test       # 87 tests
+cd pi-de && npm test           # 174 tests
 cd hypivisor && cargo test     # 107 tests (89 unit + 18 in-process integration)
 
 # Integration tests (requires built hypivisor + real pi agents via tmux)
 cd integration-tests && npx vitest run
 
 # Coverage
-cd pi-socket && npx vitest run --coverage   # 72.6% lines
-cd pi-de && npx vitest run --coverage       # 88.8% lines
-cd hypivisor && cargo tarpaulin --exclude-files src/main.rs --out stdout  # 81.0% lines
+cd pi-socket && npx vitest run --coverage   # 73% lines
+cd pi-de && npx vitest run --coverage       # 89% lines
+cd hypivisor && cargo tarpaulin --exclude-files src/main.rs --out stdout  # 81% lines
 ```
 
 ### Test breakdown
@@ -158,8 +160,8 @@ cd hypivisor && cargo tarpaulin --exclude-files src/main.rs --out stdout  # 81.0
 | Component | Unit | Integration | Coverage |
 |-----------|------|-------------|----------|
 | **hypivisor** | 89 (auth, cleanup, fs_browser, handlers, rpc, spawn) | 18 (in-process server tests) | 81% lines |
-| **pi-socket** | 44 (index, history, safety) | — | 73% lines |
-| **Pi-DE** | 59 (RemoteAgent, useHypivisor, useAgent, rpc, SpawnModal, initStorage, patchLit) | — | 89% lines |
+| **pi-socket** | 87 (index, history, safety, resilience) | — | 73% lines |
+| **Pi-DE** | 174 (RemoteAgent, useHypivisor, useAgent, useTheme, piThemes, toolRenderers, rpc, SpawnModal, initStorage, patchLit, patchSendDuringStreaming, App) | — | 89% lines |
 | **integration-tests** | — | 51 (smoke, reconnect, multi-agent, proxy-relay, lifecycle, message-roundtrip, cross-channel, browser-rendering, e2e-live) | — |
 
 The integration tests spawn real pi agents in tmux sessions and test the full stack: registration/deregistration, message round-trips (web→proxy→agent→response→web), cross-channel visibility (TUI↔Web), and browser rendering via the `surf` CLI.
