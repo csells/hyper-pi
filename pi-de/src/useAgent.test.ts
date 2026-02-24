@@ -236,4 +236,66 @@ describe("useAgent", () => {
     // No WebSocket should be created for offline node
     expect(webSocketInstances).toHaveLength(0);
   });
+
+  it("initializes pagination state from init_state", async () => {
+    const activeNode: NodeInfo = {
+      id: "test-node",
+      machine: "localhost",
+      cwd: "/tmp/test",
+      port: 9000,
+      status: "active",
+    };
+
+    const { result } = renderHook(() => useAgent(activeNode));
+
+    expect(result.current.isLoadingHistory).toBe(false);
+    expect(result.current.hasMoreHistory).toBe(true);
+
+    const ws = webSocketInstances[0];
+    ws.onopen?.call(ws);
+
+    await waitFor(() => {
+      expect(result.current.status).toBe("connected");
+    });
+
+    // Simulate init_state with truncated: true and 5 messages
+    const messageHandler = ws.addEventListener.mock.calls.find(
+      (call: [string, ...unknown[]]) => call[0] === "message",
+    )?.[1];
+
+    if (messageHandler) {
+      const initStateEvent = new MessageEvent("message", {
+        data: JSON.stringify({
+          type: "init_state",
+          truncated: true,
+          totalMessages: 5,
+          messages: [],
+          tools: [],
+        }),
+      });
+      messageHandler(initStateEvent);
+    }
+
+    await waitFor(() => {
+      expect(result.current.hasMoreHistory).toBe(true);
+    });
+  });
+
+  it("provides loadOlderMessages and history state functions", async () => {
+    const activeNode: NodeInfo = {
+      id: "test-node",
+      machine: "localhost",
+      cwd: "/tmp/test",
+      port: 9000,
+      status: "active",
+    };
+
+    const { result } = renderHook(() => useAgent(activeNode));
+
+    // Verify new exports are available
+    expect(result.current.loadOlderMessages).toBeDefined();
+    expect(typeof result.current.loadOlderMessages).toBe("function");
+    expect(result.current.isLoadingHistory).toBe(false);
+    expect(result.current.hasMoreHistory).toBe(true);
+  });
 });

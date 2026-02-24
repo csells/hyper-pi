@@ -1,12 +1,18 @@
 {
   "id": "task-5",
   "title": "Cloudflare tunnel setup documentation",
-  "status": "in_progress",
+  "status": "done",
   "depends_on": [],
   "created_at": "2026-02-24T01:11:41.310Z",
-  "updated_at": "2026-02-24T01:15:58.458Z",
+  "updated_at": "2026-02-24T01:16:16.923Z",
   "attempt_count": 1,
   "started_at": "2026-02-24T01:15:58.438Z",
   "base_commit": "b52ab3bcd54cf7217efba6ec52e0f3ebf93006ae",
-  "assigned_to": "MintRaven"
+  "completed_at": "2026-02-24T01:16:16.923Z",
+  "summary": "Created comprehensive Cloudflare tunnel setup documentation covering quick tunnel setup, named tunnel configuration, Pi-DE configuration for HTTPS access, security requirements with HYPI_TOKEN, WebSocket support, and mobile testing workflow. Includes example config.yml and troubleshooting section.",
+  "evidence": {
+    "commits": [
+      "30f13c0"
+    ]
+  }
 }

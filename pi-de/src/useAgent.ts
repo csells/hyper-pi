@@ -7,22 +7,49 @@ interface UseAgentReturn {
   remoteAgent: RemoteAgent;
   historyTruncated: boolean;
   sendMessage: (text: string) => void;
+  isLoadingHistory: boolean;
+  hasMoreHistory: boolean;
+  loadOlderMessages: () => void;
 }
 
 export function useAgent(activeNode: NodeInfo | null): UseAgentReturn {
   const [status, setStatus] = useState<AgentStatus>("disconnected");
   const [historyTruncated, setHistoryTruncated] = useState(false);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [hasMoreHistory, setHasMoreHistory] = useState(true);
   const wsRef = useRef<WebSocket | null>(null);
   const activeNodeRef = useRef<NodeInfo | null>(activeNode);
+  const oldestIndexRef = useRef<number>(0);
   const remoteAgent = useMemo(() => new RemoteAgent(), []);
 
   useEffect(() => {
     activeNodeRef.current = activeNode;
   }, [activeNode]);
 
+  const handleHistoryPage = useCallback(
+    (page: { hasMore: boolean; oldestIndex: number }) => {
+      oldestIndexRef.current = page.oldestIndex;
+      setHasMoreHistory(page.hasMore);
+      setIsLoadingHistory(false);
+    },
+    [],
+  );
+
+  const loadOlderMessages = useCallback(() => {
+    if (isLoadingHistory || !hasMoreHistory) {
+      return;
+    }
+    setIsLoadingHistory(true);
+    remoteAgent.fetchHistory(oldestIndexRef.current, 50);
+  }, [remoteAgent, isLoadingHistory, hasMoreHistory]);
+
   const handleInitState = useCallback(
-    (payload: { truncated?: boolean }) => {
+    (payload: { truncated?: boolean; totalMessages?: number }) => {
       setHistoryTruncated(payload.truncated ?? false);
+      // Initialize oldestIndex to current message count for pagination
+      oldestIndexRef.current = payload.totalMessages ?? 0;
+      setHasMoreHistory(payload.truncated ?? false);
+      setIsLoadingHistory(false);
     },
     [],
   );
@@ -66,6 +93,7 @@ export function useAgent(activeNode: NodeInfo | null): UseAgentReturn {
         setStatus("connected");
         // Set up callbacks for RemoteAgent events before connecting
         remoteAgent.onInitState = handleInitState;
+        remoteAgent.onHistoryPage = handleHistoryPage;
         remoteAgent.onError = () => {
           setStatus("offline");
           ws.close();
@@ -97,9 +125,12 @@ export function useAgent(activeNode: NodeInfo | null): UseAgentReturn {
       if (reconnectTimer) clearTimeout(reconnectTimer);
       wsRef.current?.close();
       remoteAgent.disconnect();
+      setIsLoadingHistory(false);
+      setHasMoreHistory(true);
+      oldestIndexRef.current = 0;
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps -- activeNode ref avoids reconnect loops
-  }, [activeNode?.id, remoteAgent, handleInitState]);
+  }, [activeNode?.id, remoteAgent, handleInitState, handleHistoryPage]);
 
   const sendMessage = useCallback(
     (text: string) => {
@@ -108,5 +139,13 @@ export function useAgent(activeNode: NodeInfo | null): UseAgentReturn {
     [remoteAgent],
   );
 
-  return { status, remoteAgent, historyTruncated, sendMessage };
+  return {
+    status,
+    remoteAgent,
+    historyTruncated,
+    sendMessage,
+    isLoadingHistory,
+    hasMoreHistory,
+    loadOlderMessages,
+  };
 }

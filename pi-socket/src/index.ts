@@ -28,10 +28,10 @@ import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { WebSocketServer, WebSocket } from "ws";
 import portfinder from "portfinder";
 import os from "node:os";
-import { buildInitState } from "./history.js";
+import { buildInitState, getHistoryPage } from "./history.js";
 import { boundary } from "./safety.js";
 import * as log from "./log.js";
-import type { RpcRequest } from "./types.js";
+import type { RpcRequest, FetchHistoryRequest } from "./types.js";
 
 export default function piSocket(pi: ExtensionAPI) {
   let nodeId = process.pid.toString(); // fallback until session provides UUID
@@ -100,6 +100,25 @@ export default function piSocket(pi: ExtensionAPI) {
           return;
         }
 
+        // Try to detect fetch_history JSON requests
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(text);
+        } catch {
+          parsed = null;
+        }
+
+        // Handle fetch_history requests
+        if (parsed && typeof parsed === "object" && (parsed as any).type === "fetch_history") {
+          const req = parsed as FetchHistoryRequest;
+          const page = getHistoryPage(ctx.sessionManager.getBranch(), req.before, req.limit);
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(safeSerialize(page));
+          }
+          return;
+        }
+
+        // Plain text prompt — existing logic unchanged
         // Wrap in try/catch so that ANY error from sendUserMessage is
         // logged to our JSONL file and NEVER propagates into pi's output.
         // pi.sendUserMessage() returns void (fire-and-forget); if it throws

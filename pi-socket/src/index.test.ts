@@ -239,6 +239,104 @@ describe("pi-socket/index.ts", () => {
       expect(() => messageHandler(Buffer.from("valid text"))).not.toThrow();
       expect(log.error).toHaveBeenCalledWith("sendUserMessage", error);
     });
+
+    it("handles fetch_history JSON request by not calling sendUserMessage", async () => {
+      (mockPi.sendUserMessage as ReturnType<typeof vi.fn>).mockClear();
+      piSocket(mockPi as ExtensionAPI);
+
+      const sessionStartHandlers = piEventHandlers["session_start"];
+      await sessionStartHandlers[0]({}, mockCtx);
+
+      const mockClient = { readyState: 1, send: vi.fn(), on: vi.fn() };
+      mockWssInstance.connectionHandler(mockClient);
+
+      // Get the message handler
+      let messageHandler: any = null;
+      for (const call of mockClient.on.mock.calls) {
+        if (call[0] === "message") {
+          messageHandler = call[1];
+          break;
+        }
+      }
+      expect(messageHandler).toBeDefined();
+
+      // Send fetch_history request (valid JSON)
+      const fetchRequest = JSON.stringify({
+        type: "fetch_history",
+        before: 5,
+        limit: 3,
+      });
+      messageHandler(Buffer.from(fetchRequest));
+
+      // Should NOT call sendUserMessage for fetch_history requests
+      expect(mockPi.sendUserMessage).not.toHaveBeenCalled();
+    });
+
+    it("does not treat valid JSON that isn't fetch_history as a request", async () => {
+      mockCtx.isIdle.mockReturnValue(true);
+      piSocket(mockPi as ExtensionAPI);
+
+      const sessionStartHandlers = piEventHandlers["session_start"];
+      await sessionStartHandlers[0]({}, mockCtx);
+
+      const mockClient = { readyState: 1, send: vi.fn(), on: vi.fn() };
+      mockWssInstance.connectionHandler(mockClient);
+
+      // Get the message handler
+      let messageHandler: any = null;
+      for (const call of mockClient.on.mock.calls) {
+        if (call[0] === "message") {
+          messageHandler = call[1];
+          break;
+        }
+      }
+      
+      // Send JSON that's not a fetch_history request
+      const validJson = JSON.stringify({ type: "something_else", data: 123 });
+      messageHandler(Buffer.from(validJson));
+
+      // Should be treated as plain text prompt (sent as-is to sendUserMessage)
+      expect(mockPi.sendUserMessage).toHaveBeenCalledWith(validJson);
+    });
+
+    it("skips fetch_history response if ws is not OPEN", async () => {
+      piSocket(mockPi as ExtensionAPI);
+
+      const sessionStartHandlers = piEventHandlers["session_start"];
+      
+      const entries = [
+        {
+          type: "message",
+          message: { role: "user", content: "msg", timestamp: 1000 },
+        },
+      ];
+      mockCtx.sessionManager.getBranch.mockReturnValue(entries);
+
+      await sessionStartHandlers[0]({}, mockCtx);
+
+      const mockClient = { readyState: 0, send: vi.fn(), on: vi.fn() }; // NOT OPEN
+      mockWssInstance.connectionHandler(mockClient);
+
+      // Get the message handler
+      let messageHandler: any = null;
+      for (const call of mockClient.on.mock.calls) {
+        if (call[0] === "message") {
+          messageHandler = call[1];
+          break;
+        }
+      }
+      
+      const fetchRequest = JSON.stringify({
+        type: "fetch_history",
+        before: 1,
+        limit: 10,
+      });
+      messageHandler(Buffer.from(fetchRequest));
+
+      // send() should not be called because readyState is not OPEN
+      // (init_state also not sent due to readyState check)
+      expect(mockClient.send).not.toHaveBeenCalled();
+    });
   });
 
   describe("init_state on client connect", () => {

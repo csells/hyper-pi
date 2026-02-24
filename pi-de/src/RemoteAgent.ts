@@ -23,7 +23,7 @@ import type {
   TextContent,
   UserMessage,
 } from "@mariozechner/pi-ai";
-import type { InitStateEvent, SocketEvent, Tool } from "./types";
+import type { InitStateEvent, SocketEvent, Tool, HistoryPageResponse } from "./types";
 
 /** Minimal Model stub for display purposes (remote agent owns the real model). */
 const REMOTE_MODEL = {
@@ -47,8 +47,13 @@ export class RemoteAgent {
   private ws: WebSocket | null = null;
   private messageHandler: ((event: MessageEvent) => void) | null = null;
 
+  // Pagination state for infinite scroll
+  hasMore: boolean = true;
+  oldestIndex: number = 0;
+
   // Callbacks for special events (allows useAgent to react to these)
   onInitState: ((event: InitStateEvent) => void) | null = null;
+  onHistoryPage: ((page: HistoryPageResponse) => void) | null = null;
   onError: ((error: string) => void) | null = null;
 
   // Required by AgentInterface (prevents it from overriding with proxy/key defaults)
@@ -122,6 +127,8 @@ export class RemoteAgent {
       streamMessage: null,
       pendingToolCalls: new Set(),
     };
+    this.hasMore = true;
+    this.oldestIndex = 0;
   }
 
   /** Reset state for a new agent connection. */
@@ -140,6 +147,19 @@ export class RemoteAgent {
     if (typeof text === "string") {
       this.ws.send(text);
     }
+  }
+
+  /**
+   * Request older messages for infinite scroll pagination.
+   * Sends a JSON fetch_history request over the WebSocket.
+   */
+  fetchHistory(before: number, limit: number): void {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      console.warn("[RemoteAgent] Cannot fetch history: WebSocket is not connected");
+      return;
+    }
+    const request = JSON.stringify({ type: "fetch_history", before, limit });
+    this.ws.send(request);
   }
 
   abort(): void {
@@ -174,6 +194,19 @@ export class RemoteAgent {
 
     if (socketEvent.type === "init_state") {
       this.handleInitState(socketEvent as InitStateEvent);
+      return;
+    }
+
+    // Handle history_page responses for infinite scroll
+    if (socketEvent.type === "history_page") {
+      const page = socketEvent as HistoryPageResponse;
+      this._state = { ...this._state, messages: [...page.messages, ...this._state.messages] };
+      this.hasMore = page.hasMore;
+      this.oldestIndex = page.oldestIndex;
+      if (this.onHistoryPage) {
+        this.onHistoryPage(page);
+      }
+      this.emit({ type: "agent_end", messages: this._state.messages });
       return;
     }
 
@@ -248,6 +281,9 @@ export class RemoteAgent {
       streamMessage: null,
       pendingToolCalls: new Set(),
     };
+    // Initialize pagination state: oldestIndex is current message count (next fetch starts before this)
+    this.oldestIndex = event.messages.length;
+    this.hasMore = event.truncated ?? false;
     // Call onInitState callback if provided (allows useAgent to get truncation info)
     if (this.onInitState) {
       this.onInitState(event);

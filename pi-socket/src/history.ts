@@ -1,26 +1,20 @@
-import type { ToolInfo, InitStateEvent } from "./types.js";
+import type { ToolInfo, InitStateEvent, HistoryPageResponse } from "./types.js";
 
 /** Maximum serialized size of init_state before truncation kicks in */
 const MAX_INIT_BYTES = 500 * 1024; // 500KB
 
 /**
- * Build the init_state payload from pi's native session branch.
+ * Extract AgentMessage objects from pi's session entries.
  *
  * Session entries from getBranch() are `{ type: "message", message: AgentMessage }`.
- * We extract the AgentMessage objects directly — no lossy conversion to flat events.
+ * This helper extracts the AgentMessage objects directly — no lossy conversion.
  *
- * This function is called from a wss.on("connection") handler which runs
- * on Node's event loop (outside pi's error-catching event system). It
- * MUST NOT throw, because an uncaught exception there would terminate
- * the pi process.
+ * Used by both buildInitState() and getHistoryPage().
  */
-export function buildInitState(
-  entries: unknown[],
-  tools: ToolInfo[],
-): InitStateEvent {
-  // Guard: if pi gives us something non-iterable, return empty state.
+function extractMessages(entries: unknown[]): unknown[] {
+  // Guard: if pi gives us something non-iterable, return empty array.
   if (!Array.isArray(entries)) {
-    return { type: "init_state", messages: [], tools: tools ?? [] };
+    return [];
   }
 
   const messages: unknown[] = [];
@@ -41,6 +35,64 @@ export function buildInitState(
 
     messages.push(msg);
   }
+
+  return messages;
+}
+
+/**
+ * Fetch a page of messages from the session history.
+ *
+ * Returns messages in the range [max(0, before-limit) .. before], plus
+ * metadata about whether older messages exist.
+ *
+ * Example: if total messages = 10, before = 8, limit = 3:
+ *   Returns messages at indices [5, 6, 7] (3 messages)
+ *   oldestIndex = 5
+ *   hasMore = true (messages 0-4 exist)
+ */
+export function getHistoryPage(
+  entries: unknown[],
+  before: number,
+  limit: number,
+): HistoryPageResponse {
+  const messages = extractMessages(entries);
+
+  // Clamp before to [0, messages.length]
+  const clampedBefore = Math.max(0, Math.min(before, messages.length));
+
+  // Calculate start index: fetch up to 'limit' messages before clampedBefore
+  const startIdx = Math.max(0, clampedBefore - limit);
+
+  // Slice the range [startIdx, clampedBefore)
+  const pageMessages = messages.slice(startIdx, clampedBefore);
+
+  // Determine if older messages exist
+  const hasMore = startIdx > 0;
+
+  return {
+    type: "history_page",
+    messages: pageMessages as HistoryPageResponse["messages"],
+    hasMore,
+    oldestIndex: startIdx,
+  };
+}
+
+/**
+ * Build the init_state payload from pi's native session branch.
+ *
+ * Session entries from getBranch() are `{ type: "message", message: AgentMessage }`.
+ * We extract the AgentMessage objects directly — no lossy conversion to flat events.
+ *
+ * This function is called from a wss.on("connection") handler which runs
+ * on Node's event loop (outside pi's error-catching event system). It
+ * MUST NOT throw, because an uncaught exception there would terminate
+ * the pi process.
+ */
+export function buildInitState(
+  entries: unknown[],
+  tools: ToolInfo[],
+): InitStateEvent {
+  const messages = extractMessages(entries);
 
   // Truncation — single-pass estimator instead of O(n²) re-serialization
   const serialized = JSON.stringify(messages);

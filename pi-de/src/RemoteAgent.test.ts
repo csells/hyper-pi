@@ -329,5 +329,192 @@ describe("RemoteAgent", () => {
       expect(events).toHaveLength(1);
       expect(events[0].type).toBe("agent_end");
     });
+
+    it("initializes pagination state from init_state", () => {
+      const { ws, receive } = createMockWebSocket();
+      agent.connect(ws);
+
+      const msgs = [
+        { role: "user", content: "msg1", timestamp: 1000 },
+        { role: "assistant", content: "msg2", timestamp: 2000 },
+      ];
+      receive({
+        type: "init_state",
+        messages: msgs,
+        tools: [],
+        truncated: true,
+      });
+
+      // oldestIndex should be initialized to the message count
+      expect(agent.oldestIndex).toBe(2);
+      expect(agent.hasMore).toBe(true);
+    });
+
+    it("sets hasMore to false when truncated is false", () => {
+      const { ws, receive } = createMockWebSocket();
+      agent.connect(ws);
+
+      receive({
+        type: "init_state",
+        messages: [],
+        tools: [],
+        truncated: false,
+      });
+
+      expect(agent.hasMore).toBe(false);
+    });
+  });
+
+  describe("fetchHistory", () => {
+    it("sends fetch_history JSON request over WebSocket", () => {
+      const { ws, sent } = createMockWebSocket();
+      agent.connect(ws);
+
+      agent.fetchHistory(100, 50);
+
+      expect(sent).toHaveLength(1);
+      const request = JSON.parse(sent[0]);
+      expect(request).toEqual({ type: "fetch_history", before: 100, limit: 50 });
+    });
+
+    it("does nothing if WebSocket is not connected", () => {
+      const { sent } = createMockWebSocket();
+      // Don't connect the agent
+
+      agent.fetchHistory(100, 50);
+
+      expect(sent).toHaveLength(0);
+    });
+
+    it("does nothing if WebSocket is not in OPEN state", () => {
+      const { ws, sent } = createMockWebSocket();
+      agent.connect(ws);
+
+      // Simulate closed connection
+      (ws as any).readyState = 3; // WebSocket.CLOSED
+
+      agent.fetchHistory(100, 50);
+
+      expect(sent).toHaveLength(0);
+    });
+  });
+
+  describe("history_page", () => {
+    it("handles history_page response and prepends messages", () => {
+      const { ws, receive } = createMockWebSocket();
+      agent.connect(ws);
+
+      // Start with some messages
+      receive({
+        type: "init_state",
+        messages: [
+          { role: "user", content: "msg 3", timestamp: 3000 },
+          { role: "assistant", content: "msg 4", timestamp: 4000 },
+        ],
+        tools: [],
+      });
+
+      events = []; // Clear init_state event
+
+      // Receive older messages
+      receive({
+        type: "history_page",
+        messages: [
+          { role: "user", content: "msg 1", timestamp: 1000 },
+          { role: "assistant", content: "msg 2", timestamp: 2000 },
+        ],
+        hasMore: true,
+        oldestIndex: 0,
+      });
+
+      // Messages should be prepended
+      expect(agent.state.messages).toHaveLength(4);
+      expect(agent.state.messages[0].content).toBe("msg 1");
+      expect(agent.state.messages[3].content).toBe("msg 4");
+
+      // Pagination state should be updated
+      expect(agent.oldestIndex).toBe(0);
+      expect(agent.hasMore).toBe(true);
+
+      // agent_end event should be emitted
+      expect(events).toHaveLength(1);
+      expect(events[0].type).toBe("agent_end");
+    });
+
+    it("calls onHistoryPage callback if set", () => {
+      const { ws, receive } = createMockWebSocket();
+      agent.connect(ws);
+
+      const historyPages: any[] = [];
+      agent.onHistoryPage = (page) => historyPages.push(page);
+
+      receive({
+        type: "init_state",
+        messages: [],
+        tools: [],
+      });
+
+      receive({
+        type: "history_page",
+        messages: [{ role: "user", content: "old msg", timestamp: 1000 }],
+        hasMore: false,
+        oldestIndex: 0,
+      });
+
+      expect(historyPages).toHaveLength(1);
+      expect(historyPages[0]).toEqual({
+        type: "history_page",
+        messages: [{ role: "user", content: "old msg", timestamp: 1000 }],
+        hasMore: false,
+        oldestIndex: 0,
+      });
+    });
+
+    it("does not call onHistoryPage callback if not set", () => {
+      const { ws, receive } = createMockWebSocket();
+      agent.connect(ws);
+
+      // Don't set agent.onHistoryPage
+
+      receive({
+        type: "init_state",
+        messages: [],
+        tools: [],
+      });
+
+      events = [];
+      receive({
+        type: "history_page",
+        messages: [],
+        hasMore: false,
+        oldestIndex: 0,
+      });
+
+      // Should not throw and agent_end should be emitted
+      expect(events).toHaveLength(1);
+      expect(events[0].type).toBe("agent_end");
+    });
+  });
+
+  describe("disconnect", () => {
+    it("resets pagination state on disconnect", () => {
+      const { ws, receive } = createMockWebSocket();
+      agent.connect(ws);
+
+      receive({
+        type: "init_state",
+        messages: [],
+        tools: [],
+        truncated: true,
+      });
+
+      expect(agent.hasMore).toBe(true);
+      expect(agent.oldestIndex).toBe(0);
+
+      agent.disconnect();
+
+      expect(agent.hasMore).toBe(true); // Reset to default
+      expect(agent.oldestIndex).toBe(0); // Reset to default
+    });
   });
 });

@@ -28,10 +28,31 @@ export interface InitStateEvent {
 }
 
 /**
+ * Client request to fetch older messages for infinite scroll.
+ * Sent as JSON over WebSocket; server responds with HistoryPageResponse.
+ */
+export interface FetchHistoryRequest {
+  type: "fetch_history";
+  before: number;  // message index — fetch messages before this index
+  limit: number;   // max messages to return
+}
+
+/**
+ * Server response to a fetch_history request.
+ * Contains a slice of older messages ready to prepend to the conversation.
+ */
+export interface HistoryPageResponse {
+  type: "history_page";
+  messages: AgentMessage[];
+  hasMore: boolean;        // true if older messages exist before this page
+  oldestIndex: number;     // index of the oldest message in this page
+}
+
+/**
  * Wire protocol from pi-socket: either init_state or a forwarded pi AgentEvent.
  * pi-socket forwards events as-is — no custom decomposition.
  */
-export type SocketEvent = InitStateEvent | AgentEvent;
+export type SocketEvent = InitStateEvent | AgentEvent | HistoryPageResponse;
 
 // ── Hypivisor Registry Protocol ───────────────────────────────
 

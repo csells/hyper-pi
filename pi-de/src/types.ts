@@ -13,4 +13,6 @@ export type {
   AgentStatus,
   HypivisorEvent,
   RpcResponse,
+  FetchHistoryRequest,
+  HistoryPageResponse,
 } from "hyper-pi-protocol";

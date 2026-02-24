@@ -50,6 +50,9 @@ describe("App", () => {
       remoteAgent: {} as any,
       historyTruncated: false,
       sendMessage: vi.fn(),
+      isLoadingHistory: false,
+      hasMoreHistory: true,
+      loadOlderMessages: vi.fn(),
     });
   });
 

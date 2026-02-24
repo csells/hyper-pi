@@ -33,9 +33,15 @@ export default function App() {
   const { status: hvStatus, nodes, wsRef: hvWsRef } = useHypivisor(HYPIVISOR_PORT, HYPI_TOKEN);
   const [activeNode, setActiveNode] = useState<NodeInfo | null>(null);
   const agent = useAgent(activeNode);
+  const {
+    isLoadingHistory,
+    hasMoreHistory,
+    loadOlderMessages,
+  } = agent;
 
   const [showSpawnModal, setShowSpawnModal] = useState(false);
   const agentInterfaceRef = useRef<HTMLElement | null>(null);
+  const scrollHeightRef = useRef<number>(0);
 
 
 
@@ -78,6 +84,57 @@ export default function App() {
     // 3. Clears the editor
     // 4. Calls this.session.prompt(text) → RemoteAgent.prompt → ws.send
   }, [agent.remoteAgent, agent.status, activeNode]);
+
+  // Set up scroll listener for infinite scroll history loading
+  useEffect(() => {
+    const containerEl = agentInterfaceRef.current;
+    if (!containerEl || !activeNode) return;
+
+    // Find the scrollable container inside agent-interface
+    const scrollableEl = containerEl.querySelector(".overflow-y-auto") as HTMLElement | null;
+    if (!scrollableEl) return;
+
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const handleScroll = () => {
+      // Debounce scroll events to avoid rapid duplicate requests
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        if (scrollableEl.scrollTop < 50 && hasMoreHistory && !isLoadingHistory) {
+          // Save current scroll height before loading (for restoration)
+          scrollHeightRef.current = scrollableEl.scrollHeight;
+          loadOlderMessages();
+        }
+      }, 200);
+    };
+
+    scrollableEl.addEventListener("scroll", handleScroll);
+    return () => {
+      scrollableEl.removeEventListener("scroll", handleScroll);
+      if (debounceTimer) clearTimeout(debounceTimer);
+    };
+  }, [activeNode, hasMoreHistory, isLoadingHistory, loadOlderMessages]);
+
+  // Restore scroll position after messages are prepended
+  useEffect(() => {
+    if (isLoadingHistory || scrollHeightRef.current === 0) return; // Still loading or not tracking
+    
+    const containerEl = agentInterfaceRef.current;
+    if (!containerEl) return;
+    
+    const scrollableEl = containerEl.querySelector(".overflow-y-auto") as HTMLElement | null;
+    if (!scrollableEl) return;
+
+    // Use requestAnimationFrame to ensure DOM has settled after prepending
+    requestAnimationFrame(() => {
+      const newHeight = scrollableEl.scrollHeight;
+      const heightDelta = newHeight - scrollHeightRef.current;
+      if (heightDelta > 0) {
+        scrollableEl.scrollTop += heightDelta;
+        scrollHeightRef.current = 0;
+      }
+    });
+  }, [isLoadingHistory]);
 
   const projectName = (cwd: string) =>
     cwd.split(/[/\\]/).filter(Boolean).pop() ?? cwd;
@@ -151,6 +208,13 @@ export default function App() {
             {agent.historyTruncated && (
               <div className="truncation-notice">
                 Showing recent history (truncated)
+              </div>
+            )}
+
+            {isLoadingHistory && (
+              <div className="loading-history">
+                <div className="spinner" />
+                <span>Loading older messages…</span>
               </div>
             )}
 

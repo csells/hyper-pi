@@ -7,6 +7,8 @@
 export type {
   ToolInfo,
   InitStateEvent,
+  FetchHistoryRequest,
+  HistoryPageResponse,
   SocketEvent,
   RpcRequest,
 } from "hyper-pi-protocol";

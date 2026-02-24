@@ -1,12 +1,21 @@
 {
   "id": "task-3",
   "title": "History pagination protocol and pi-socket server handler",
-  "status": "in_progress",
+  "status": "done",
   "depends_on": [],
   "created_at": "2026-02-24T01:11:41.308Z",
-  "updated_at": "2026-02-24T01:15:48.196Z",
+  "updated_at": "2026-02-24T01:21:30.327Z",
   "attempt_count": 1,
   "started_at": "2026-02-24T01:15:48.180Z",
   "base_commit": "b52ab3bcd54cf7217efba6ec52e0f3ebf93006ae",
-  "assigned_to": "MintArrow"
+  "completed_at": "2026-02-24T01:21:30.327Z",
+  "summary": "Implemented history pagination protocol (FetchHistoryRequest, HistoryPageResponse) in hyper-pi-protocol. Added getHistoryPage() function in pi-socket with correct message slicing, hasMore flag, and oldestIndex metadata. Implemented ws.on('message') handler to detect and route fetch_history JSON requests separately from plain text prompts. Re-exported types. 12 unit tests for getHistoryPage() + 3 message routing tests. All 77 pi-socket tests pass. Ready for task-4 (infinite scroll client) to integrate.",
+  "evidence": {
+    "commits": [
+      "task-3"
+    ],
+    "tests": [
+      "npm test (77 passed)"
+    ]
+  }
 }
