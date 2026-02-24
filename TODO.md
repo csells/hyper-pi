@@ -1,29 +1,10 @@
 # pi-de features
 
-## quality of life
+## End-to-End
 
-- [x] I STILL can't enter a prompt while the agent is producing it's result!!!
-- [x] group chats under projects
-- autocomplete for commands/skills when the user presses "/"
-- autocomplete for at-file references (`@`)
-- [x] show the system pid for debugging
-- [x] show a working indicator of some kind
-- [x] scroll position when selecting an agent isn't at the bottom -- it's at some
-  random spot, perhaps based on the previous scroll position from the last
-  selected agent
-- [x] check that Spawn works
-- [x] why does the tool output look SO different from the tui UI?
-- [x] theming: support all of the pi agent themes
-- [x] need a cancel button AND a submit button during streaming responses
-- [x] show the name of the session as well as the project
-  - [x] make it easy to name the session
-- [x] what are the greyed out agents for? why do I want to click on dead agents and
-  see no content?
-- [x] show the session as working or idle with a green or yellow dot respectively
-
-## Files
-
-- attach files (check the tmux-adapter implementation)
+- [ ] autocomplete for commands/skills when the user presses "/"
+- [ ] autocomplete for at-file references (`@`)
+- [ ] attach files (check the tmux-adapter implementation)
 
 ## mobile
 
@@ -32,9 +13,29 @@
         conversation loaded; pressing the back button takes the user back to the
         list of chats
   - [x] when the vkb comes up on mobile, pressing Enter in the vkb adds a
-        newline to the prompt; pressing the submit button sends the actual prompt
-        (to be executed immediately or queued as appropriate)
+        newline to the prompt; pressing the submit button sends the actual
+        prompt (to be executed immediately or queued as appropriate)
 - [x] let's try setting up a CF tunnel
 - [x] load just the most recent messages and when the user scrolls back, pull in
-      additional messages; this allows agent history to load quickly and allows the
-      user to see the entire history if they so choose
+      additional messages; this allows agent history to load quickly and allows
+      the user to see the entire history if they so choose
+
+## quality of life
+
+- [x] I STILL can't enter a prompt while the agent is producing it's result!!!
+- [x] group chats under projects
+- [x] show the system pid for debugging
+- [x] show a working indicator of some kind
+- [x] scroll position when selecting an agent isn't at the bottom -- it's at
+      some random spot, perhaps based on the previous scroll position from the
+      last selected agent
+- [x] check that Spawn works
+- [x] why does the tool output look SO different from the tui UI?
+- [x] theming: support all of the pi agent themes
+- [x] need a cancel button AND a submit button during streaming responses
+- [x] show the name of the session as well as the project
+  - [x] make it easy to name the session
+- [x] what are the greyed out agents for? why do I want to click on dead agents
+      and see no content?
+- [x] show the session as working or idle with a green or yellow dot
+      respectively
