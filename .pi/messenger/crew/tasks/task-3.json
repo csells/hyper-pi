@@ -1,13 +1,12 @@
 {
   "id": "task-3",
-  "title": "Hypivisor Rust unit test gaps (spawn.rs, fs_browser.rs)",
-  "status": "done",
+  "title": "History pagination protocol and pi-socket server handler",
+  "status": "in_progress",
   "depends_on": [],
-  "created_at": "2026-02-23T14:52:04.374Z",
-  "updated_at": "2026-02-23T14:54:20.259Z",
+  "created_at": "2026-02-24T01:11:41.308Z",
+  "updated_at": "2026-02-24T01:15:48.196Z",
   "attempt_count": 1,
-  "started_at": "2026-02-23T14:52:19.302Z",
-  "base_commit": "40ee37d9371b82261831838033a31f1137cd7f0e",
-  "completed_at": "2026-02-23T14:54:20.259Z",
-  "summary": "Added 15 new Rust unit tests: 9 tests for spawn.rs (validate_spawn_path: path outside home, nonexistent path, new folder creation, whitespace trim, empty folder, canonicalization, path traversal, nested dirs, whitespace-only folder) and 6 tests for fs_browser.rs (sorted output, empty dir, nonexistent path, files-only, canonical path, hidden dirs). Refactored validate_spawn_path out of spawn_agent for testability. All 41 hypivisor tests pass. Release binary rebuilt."
+  "started_at": "2026-02-24T01:15:48.180Z",
+  "base_commit": "b52ab3bcd54cf7217efba6ec52e0f3ebf93006ae",
+  "assigned_to": "MintArrow"
 }

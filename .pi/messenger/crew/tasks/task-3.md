@@ -1,30 +1,48 @@
-# Hypivisor Rust unit test gaps (spawn.rs, fs_browser.rs)
+# History pagination protocol and pi-socket server handler
 
-Add unit tests for `spawn.rs` and expand `fs_browser.rs` tests. These modules have business-critical path validation logic with 0 and 2 tests respectively.
+Add the `fetch_history` request/response protocol types to `hyper-pi-protocol` and implement the server-side handler in pi-socket that serves paginated history from the session branch.
 
 **Files to modify:**
-- `hypivisor/src/spawn.rs` — add `#[cfg(test)] mod tests` (~80 lines)
-- `hypivisor/src/fs_browser.rs` — extend existing `mod tests` (~60 lines)
+- `hyper-pi-protocol/src/index.ts` — Add new types:
+  ```typescript
+  export interface FetchHistoryRequest {
+    type: "fetch_history";
+    before: number;  // message index — fetch messages before this index
+    limit: number;   // max messages to return
+  }
+  export interface HistoryPageResponse {
+    type: "history_page";
+    messages: AgentMessage[];
+    hasMore: boolean;
+    oldestIndex: number;  // index of the oldest message in this page
+  }
+  ```
+  Update `SocketEvent` union to include `HistoryPageResponse`.
+- `pi-socket/src/history.ts` — Add `getHistoryPage(entries: unknown[], before: number, limit: number): HistoryPageResponse` function. Extract the message-extraction logic from `buildInitState` into a shared `extractMessages(entries)` helper. `getHistoryPage` returns the slice `[max(0, before-limit) .. before]` plus `hasMore` flag and `oldestIndex`.
+- `pi-socket/src/index.ts` — Modify `ws.on("message")` handler to detect JSON `fetch_history` requests vs plain text prompts. Try `JSON.parse(text)` — if result has `type === "fetch_history"`, handle it. On parse failure or any other type, fall through to existing `sendUserMessage()` logic. Must store `ctx` reference accessible to the handler.
+- `pi-socket/src/types.ts` — Re-export `FetchHistoryRequest` and `HistoryPageResponse` from hyper-pi-protocol.
 
-**spawn.rs tests (6-8 tests):**
-1. `spawn_agent` rejects path outside home directory → returns Err
-2. `spawn_agent` rejects non-existent path when no new_folder → returns Err("Path does not exist")
-3. `spawn_agent` creates new_folder subdirectory when specified
-4. `spawn_agent` with new_folder trims whitespace
-5. `spawn_agent` with empty new_folder and existing path proceeds (uses path directly)
-6. `spawn_agent` returns canonicalized path on success
-7. Path traversal with `..` is caught by canonicalize + starts_with check
-
-**Note:** The actual `Command::new("pi").spawn()` call will fail in CI since `pi` may not be installed. Tests should focus on the validation logic up to the point of spawning. Use temp directories within $HOME for tests that need valid paths.
-
-**fs_browser.rs additional tests (4-5 tests):**
-1. Empty directory returns empty vec
-2. Directory with only hidden entries returns empty vec
-3. Files (not directories) are excluded
-4. Non-existent path returns error
-5. Deeply nested directory works correctly
+**Message routing logic in `ws.on("message")`:**
+```typescript
+const text = data.toString();
+if (!text.trim()) { /* reject empty */ return; }
+let parsed: unknown;
+try { parsed = JSON.parse(text); } catch { parsed = null; }
+if (parsed && typeof parsed === "object" && (parsed as any).type === "fetch_history") {
+  const req = parsed as FetchHistoryRequest;
+  const page = getHistoryPage(ctx.sessionManager.getBranch(), req.before, req.limit);
+  if (ws.readyState === WebSocket.OPEN) ws.send(safeSerialize(page));
+  return;
+}
+// Plain text prompt — existing logic unchanged
+```
 
 **Acceptance criteria:**
-- ~12 new Rust tests
-- Tests pass with `cd hypivisor && cargo test`
-- All path validation edge cases covered
+- `getHistoryPage()` correctly slices messages from session entries
+- `getHistoryPage()` returns `hasMore: true` when older messages exist, `false` at beginning
+- Edge cases handled: `before=0`, `limit > total messages`, empty entries, `before > total`
+- JSON `fetch_history` messages are handled and NOT sent to `pi.sendUserMessage()`
+- Plain text prompts (including valid JSON that isn't `fetch_history`) still work as before
+- `hyper-pi-protocol` builds: `cd hyper-pi-protocol && npm run build`
+- New tests: `getHistoryPage()` unit tests (~8 tests), message routing tests (~4 tests)
+- Tests pass with `cd pi-socket && npm test`

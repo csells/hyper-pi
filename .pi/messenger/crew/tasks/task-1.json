@@ -1,21 +1,12 @@
 {
   "id": "task-1",
-  "title": "Pi-socket index.ts unit tests",
-  "status": "done",
+  "title": "Responsive mobile layout with roster-to-chat navigation",
+  "status": "in_progress",
   "depends_on": [],
-  "created_at": "2026-02-23T14:52:04.373Z",
-  "updated_at": "2026-02-23T15:03:33.921Z",
+  "created_at": "2026-02-24T01:11:41.306Z",
+  "updated_at": "2026-02-24T01:12:27.837Z",
   "attempt_count": 1,
-  "started_at": "2026-02-23T14:52:04.393Z",
-  "base_commit": "40ee37d9371b82261831838033a31f1137cd7f0e",
-  "completed_at": "2026-02-23T15:03:33.921Z",
-  "summary": "Created comprehensive unit tests for pi-socket/src/index.ts with 44 passing tests covering broadcast(), session_start handler, ws.on(message) handler, init_state on client connect, event forwarding, session_shutdown handler, hypivisor connection, and event handler registration. All tests use proper mocking of ws, portfinder, and log modules without modifying production code.",
-  "evidence": {
-    "commits": [
-      "5a0d0c5"
-    ],
-    "tests": [
-      "npm test (pi-socket): 44 passed"
-    ]
-  }
+  "started_at": "2026-02-24T01:12:27.818Z",
+  "base_commit": "fab098a3e6ad8be686d116236a06670dd5740435",
+  "assigned_to": "WildWolf"
 }

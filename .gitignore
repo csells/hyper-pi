@@ -71,3 +71,7 @@ pi-socket/*.d.ts.map
 !pi-socket/eslint.config.js
 .pi/messenger/
 tmp/
+.pi/messenger/feed.jsonl
+.pi/messenger/crew/plan.json
+.pi/messenger/crew/planning-progress.md
+.pi/messenger/crew/planning-state.json

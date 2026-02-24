@@ -1,21 +1,21 @@
 {
   "id": "task-2",
-  "title": "Pi-DE component unit test gaps (SpawnModal, initStorage, patchLit)",
+  "title": "Mobile virtual keyboard Enter-key behavior",
   "status": "done",
   "depends_on": [],
-  "created_at": "2026-02-23T14:52:04.374Z",
-  "updated_at": "2026-02-23T15:02:57.285Z",
-  "attempt_count": 2,
-  "started_at": "2026-02-23T14:54:20.271Z",
-  "base_commit": "40ee37d9371b82261831838033a31f1137cd7f0e",
-  "completed_at": "2026-02-23T15:02:57.285Z",
-  "summary": "Created 3 comprehensive test files with 25 new tests: SpawnModal.test.tsx (11 tests), initStorage.test.ts (10 tests), patchLit.test.ts (4 tests). All 59 pi-de tests pass with 100% coverage on initStorage.ts and >80% on SpawnModal.tsx. Commit: 5a0d0c5",
+  "created_at": "2026-02-24T01:11:41.308Z",
+  "updated_at": "2026-02-24T01:15:48.165Z",
+  "attempt_count": 1,
+  "started_at": "2026-02-24T01:12:31.513Z",
+  "base_commit": "fab098a3e6ad8be686d116236a06670dd5740435",
+  "completed_at": "2026-02-24T01:15:48.165Z",
+  "summary": "Implemented mobile virtual keyboard Enter-key behavior patch for Pi-DE. Mobile devices (detected via coarse pointer or touchstart) now insert newlines on Enter instead of submitting. Desktop behavior unchanged. Send button handles submission on mobile. Integration with App.tsx completed with proper cleanup in useEffect.",
   "evidence": {
     "commits": [
-      "5a0d0c5"
+      "b52ab3b"
     ],
     "tests": [
-      "npm test in pi-de shows 59 passing tests"
+      "npm test patchMobileKeyboard.test.ts — 13 tests passing"
     ]
   }
 }

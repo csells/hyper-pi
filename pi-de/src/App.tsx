@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useHypivisor } from "./useHypivisor";
 import { useAgent } from "./useAgent";
 import SpawnModal from "./SpawnModal";
+import { patchMobileKeyboard } from "./patchMobileKeyboard";
 import type { NodeInfo } from "./types";
 
 // Import pi-web-ui components (registers <agent-interface> custom element)
@@ -65,6 +66,12 @@ export default function App() {
     ai.enableThinkingSelector = false;
     ai.enableAttachments = false;
 
+    // Patch mobile keyboard behavior: Enter = newline, Shift+Enter = send
+    const cleanup = patchMobileKeyboard(el);
+    return () => {
+      cleanup();
+    };
+
     // No overrides needed. The original AgentInterface.sendMessage:
     // 1. Checks isStreaming — allows sends when agent is idle
     // 2. Checks API key — dummy keys pre-populated in initPiDeStorage
@@ -76,7 +83,7 @@ export default function App() {
     cwd.split(/[/\\]/).filter(Boolean).pop() ?? cwd;
 
   return (
-    <div className="pi-de-layout">
+    <div className={`pi-de-layout ${activeNode ? "agent-selected" : ""}`}>
       {/* ── LEFT: Roster ─────────────────────────────────── */}
       <div className="sidebar roster-pane">
         <h2>Hyper-Pi Mesh</h2>
@@ -129,6 +136,7 @@ export default function App() {
         {activeNode ? (
           <>
             <div className="stage-header">
+              <button className="back-button" onClick={() => setActiveNode(null)}>← Back</button>
               <h3>{activeNode.cwd}</h3>
               {agent.status !== "connected" && (
                 <span className="agent-status">

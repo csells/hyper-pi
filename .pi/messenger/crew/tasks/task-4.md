@@ -1,31 +1,55 @@
-# Live pi agent lifecycle integration tests
+# Pi-DE infinite scroll client with history prepending
 
-Create integration tests that spawn REAL pi agents using the pi CLI, verify they register with hypivisor, appear in the roster, and cleanly deregister on shutdown. This establishes the infrastructure (tmux helpers, pi process management) needed by subsequent integration tasks.
+Implement the client side of lazy message loading: detect scroll-to-top, send `fetch_history` requests, and prepend older messages to the conversation.
 
-**Files to create/modify:**
-- `integration-tests/src/pi-agent-helpers.ts` (new — ~120 lines) — Helper functions for managing real pi agents in tmux
-- `integration-tests/src/lifecycle.test.ts` (new — ~180 lines)
+**Files to modify:**
+- `pi-de/src/RemoteAgent.ts` — Add:
+  - `fetchHistory(before: number, limit: number): void` method that sends JSON `{ type: "fetch_history", before, limit }` over the WebSocket
+  - Handle `history_page` response in `handleSocketEvent()`: prepend `messages` to `this._state.messages`, update local state
+  - Track `hasMore` and `oldestIndex` state properties
+  - Add `onHistoryPage?: (page: HistoryPageResponse) => void` callback
+- `pi-de/src/useAgent.ts` — Add:
+  - `isLoadingHistory` state, `hasMoreHistory` state
+  - `oldestIndex` ref for pagination cursor
+  - Wire `remoteAgent.onHistoryPage` to update loading/cursor state
+  - `loadOlderMessages()` function calling `remoteAgent.fetchHistory(oldestIndex, 50)`
+  - Initialize `oldestIndex` from `init_state` message count
+  - Return `{ isLoadingHistory, hasMoreHistory, loadOlderMessages }` from hook
+- `pi-de/src/App.tsx` — Add:
+  - Destructure new values from `useAgent()`
+  - `useEffect` attaching scroll listener to `agentInterfaceRef`'s `.overflow-y-auto` child
+  - When `scrollTop < 50` and `hasMoreHistory` and `!isLoadingHistory`, call `loadOlderMessages()`
+  - Show loading indicator above messages when `isLoadingHistory`
+  - After prepend, restore scroll position: save `scrollHeight` before, set `scrollTop += newScrollHeight - oldScrollHeight` after
+- `pi-de/src/App.css` — Add `.loading-history` styles (centered spinner/text above messages)
 
-**Exported helpers (pi-agent-helpers.ts):**
-- `startPiAgent(opts: { cwd: string, hypivisorPort: number, env?: Record<string,string> }): Promise<{ sessionName: string, nodeId: string, port: number }>` — Creates tmux session, starts `pi` with `HYPIVISOR_WS` set, polls hypivisor until registration appears
-- `stopPiAgent(sessionName: string): Promise<void>` — Sends `/quit` via tmux send-keys then kills session
-- `waitForNode(hypivisorPort: number, predicate: (node: Record<string,unknown>) => boolean, timeoutMs?: number): Promise<Record<string,unknown>>` — Connects to hypivisor, waits for matching node in init or node_joined events
+**Scroll position restoration:**
+```typescript
+const container = agentInterfaceRef.current?.querySelector(".overflow-y-auto");
+const prevHeight = container.scrollHeight;
+// ... after messages prepended ...
+requestAnimationFrame(() => {
+  container.scrollTop += container.scrollHeight - prevHeight;
+});
+```
 
-**Tests (6-8 tests):**
-1. Single agent: start pi in temp dir → appears in hypivisor roster within 15s → status is "active"
-2. Agent shutdown: start pi, then stop it → hypivisor emits node_offline within 10s
-3. Agent deregistration: start pi, quit cleanly → node is eventually removed (deregister RPC)
-4. **Multi-agent same directory (SACRED):** start 2 pi agents in same temp dir → BOTH appear in roster with different ports, different IDs, same cwd
-5. Agent re-registration: start pi, kill hypivisor, restart hypivisor → agent re-registers within reconnectMs
-6. Agent metadata: registered node has correct machine (hostname), cwd, valid port
-
-**Infrastructure:**
-- Use `mkdtemp` for temp directories, clean up in afterAll
-- Start hypivisor via existing `startHypivisor()` helper
-- Use tmux for pi processes: `tmux new-session -d -s {name} "HYPIVISOR_WS=ws://localhost:{port}/ws pi"`
-- Set generous timeouts (30s per test) since pi startup includes extension loading
+**RemoteAgent history_page handling:**
+```typescript
+if (socketEvent.type === "history_page") {
+  const page = socketEvent as HistoryPageResponse;
+  this._state = { ...this._state, messages: [...page.messages, ...this._state.messages] };
+  this.onHistoryPage?.(page);
+  this.emit({ type: "agent_end", messages: this._state.messages });
+  return;
+}
+```
 
 **Acceptance criteria:**
-- Tests pass with `cd integration-tests && npm test -- --testPathPattern lifecycle`
-- All tests clean up tmux sessions and temp dirs
-- Multi-agent-per-directory constraint validated
+- Scrolling to top triggers `fetch_history` request with correct cursor
+- Older messages prepended above existing messages
+- Scroll position preserved (no jump) after prepending
+- Loading indicator visible while fetching
+- No fetches when `hasMore` is false
+- Debouncing prevents rapid duplicate requests
+- Tests: RemoteAgent `fetchHistory()` sends correct JSON, `history_page` handling prepends, useAgent loading state, scroll detection
+- Tests pass with `cd pi-de && npm test`

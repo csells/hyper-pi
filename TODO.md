@@ -39,4 +39,8 @@
   - make it easy to name the session
 - what are the greyed out agents for? why do I want to click on dead agents and
   see no content?
+- show the session as working or idle with a green or yellow dot respectively
+
+## Files
+
 - attach files (check the tmux-adapter implementation)

@@ -1,25 +1,22 @@
-# Pi-socket index.ts unit tests
+# Responsive mobile layout with roster-to-chat navigation
 
-Add comprehensive unit tests for `pi-socket/src/index.ts` — the main extension module that currently has zero tests. Create `pi-socket/src/index.test.ts`.
+Implement the mobile-first responsive layout where the roster and chat view are full-screen pages that toggle on agent selection, satisfying R-UI-3.
 
-**Files to create/modify:**
-- `pi-socket/src/index.test.ts` (new — ~200 lines)
+**Files to modify:**
+- `pi-de/src/App.tsx` — Add `agent-selected` class to `.pi-de-layout` when `activeNode` is non-null. Add a back button inside `.stage-header` that calls `setActiveNode(null)`. The back button should only render on mobile (hidden via CSS on desktop).
+- `pi-de/src/App.css` — Style the `.back-button` in the stage-header (touch-friendly 44px, left-aligned). Verify/fix the existing media query rules at lines 575-600. Add `display: none` for `.back-button` on desktop viewports.
 
-**What to test:**
-1. **broadcast()** — sends JSON to all OPEN clients, skips CLOSING/CLOSED clients
-2. **safeSerialize()** — handles BigInt, circular refs, functions, falls back to error JSON
-3. **session_start handler** — finds port via portfinder, creates WSS, calls connectToHypivisor
-4. **ws.on("message") handler** — calls `pi.sendUserMessage(text)` when idle, `pi.sendUserMessage(text, { deliverAs: "followUp" })` when busy
-5. **init_state on client connect** — calls buildInitState and sends JSON to new client
-6. **Event forwarding** — message_start, message_update, message_end, tool_execution_start/update/end all call broadcast()
-7. **session_shutdown** — sends deregister RPC, closes WSS, closes hypivisor WS
-8. **Reconnect logic** — exponential backoff (reconnectMs → double → capped at 5min), resets on success
-9. **Hypivisor URL validation** — invalid URL sets hypivisorUrlValid=false, stops reconnects
-10. **shutdownRequested flag** — prevents reconnect after shutdown
-
-**Mock approach:** Create mock `ExtensionAPI` with `on()`, `sendUserMessage()`, `getAllTools()`, mock `ctx` with `sessionManager`, `isIdle()`, `ui.notify()`. Use vitest's `vi.mock()` for `ws` and `portfinder` modules. Export internal functions or test through the public extension function.
+**Implementation details:**
+- The className on the layout div changes from `"pi-de-layout"` to `` `pi-de-layout ${activeNode ? "agent-selected" : ""}` ``
+- The existing CSS rules (`.pi-de-layout.agent-selected .roster-pane { display: none }` and `.pi-de-layout.agent-selected .main-stage { display: flex }`) already handle the visibility toggling
+- The back button goes inside `.stage-header` before the `<h3>`: `<button className="back-button" onClick={() => setActiveNode(null)}>← Back</button>`
+- On desktop (>767px), `.back-button { display: none }` — the sidebar is always visible
 
 **Acceptance criteria:**
-- All 10 areas tested with positive and negative cases (~15-20 tests)
-- Tests pass with `cd pi-socket && npm test`
-- No changes to production code (or minimal refactoring to enable testability without changing behavior)
+- On viewports <768px, only roster is visible when no agent is selected
+- Clicking an agent card shows full-screen chat, roster is hidden
+- Back button in chat header returns to roster (clears activeNode)
+- Back button is hidden on desktop viewports
+- All existing desktop tests pass unchanged
+- New tests: verify `agent-selected` class toggling, back button click clears selection
+- Tests pass with `cd pi-de && npm test`

@@ -1,38 +1,29 @@
-# Pi-DE component unit test gaps (SpawnModal, initStorage, patchLit)
+# Mobile virtual keyboard Enter-key behavior
 
-Add unit tests for the 3 untested Pi-DE modules. Create test files alongside each source file.
+On mobile devices, make Enter in the virtual keyboard insert a newline in the prompt textarea instead of submitting. The existing visible Send button in MessageEditor handles submission.
 
 **Files to create/modify:**
-- `pi-de/src/SpawnModal.test.tsx` (new — ~150 lines)
-- `pi-de/src/initStorage.test.ts` (new — ~100 lines)
-- `pi-de/src/patchLit.test.ts` (new — ~60 lines)
+- `pi-de/src/patchMobileKeyboard.ts` (new, ~60 lines) — Module that sets up mobile keyboard interception on the `<agent-interface>` element's textarea
+- `pi-de/src/patchMobileKeyboard.test.ts` (new, ~100 lines) — Tests
+- `pi-de/src/App.tsx` — Import `patchMobileKeyboard` and call it in the `useEffect` that wires the `agentInterfaceRef`, adding its cleanup to the effect return
 
-**SpawnModal tests (8-10 tests):**
-1. Renders modal with title, file browser, controls
-2. Calls `rpcCall("list_directories", {})` on mount (empty path = $HOME default)
-3. Double-clicking a directory navigates into it (updates path, reloads dirs)
-4. "Up" button navigates to parent directory
-5. Successful spawn: calls `rpcCall("spawn_agent", { path, new_folder })`, calls `onClose()`
-6. Failed spawn: shows error message, modal stays open, deploy button re-enables
-7. Loading state: deploy button shows "Deploying…" and is disabled during RPC
-8. Overlay click calls `onClose()`
-9. Empty directory list shows "No subdirectories"
-10. New folder input updates state
+**Implementation details:**
+- Mobile detection: `window.matchMedia("(pointer: coarse)").matches` as primary signal (targets touch devices). Falls back to `"ontouchstart" in window`. Export `isMobileDevice()` for testability.
+- `patchMobileKeyboard(el: HTMLElement): () => void` function:
+  1. Uses `MutationObserver` to find the `textarea` element inside the `<agent-interface>` (it renders in light DOM — `createRenderRoot() { return this; }`)
+  2. Adds a capturing `keydown` listener on the textarea
+  3. If `isMobileDevice()` and `e.key === "Enter"` and `!e.shiftKey`: call `e.stopImmediatePropagation()` to prevent MessageEditor's `handleKeyDown` from firing. The default textarea behavior (insert newline) proceeds.
+  4. Returns a cleanup function that removes the listener and disconnects the observer
+- In `App.tsx`'s existing `useEffect` (the one that sets `ai.session`), after wiring the agent: `const cleanup = patchMobileKeyboard(el); return () => { cleanup(); };`
+- The Send button in MessageEditor (onClick: this.handleSend) already works for submission.
 
-**initStorage tests (5-6 tests):**
-1. `initPiDeStorage()` creates AppStorage and sets it via `setAppStorage()`
-2. MemoryBackend get/set/delete/keys/has/clear work correctly
-3. MemoryBackend transaction() executes operation
-4. Dummy API keys pre-populated for all providers (anthropic, openai, google, etc.)
-5. getQuotaInfo returns expected values
-6. requestPersistence returns true
-
-**patchLit tests (3-4 tests):**
-1. When no `agent-interface` element registered, patch is a no-op (no errors)
-2. When Lit element exists with class-field-shadowed properties, patch removes own properties and restores via accessor
-3. Calling patched performUpdate doesn't throw
+**Why `stopImmediatePropagation` works:** Both our capturing listener and MessageEditor's `@keydown` handler are on the same element (the textarea, in light DOM). Our listener registered via `addEventListener("keydown", fn, { capture: true })` fires before Lit's event binding. Calling `stopImmediatePropagation()` prevents MessageEditor's handler from executing.
 
 **Acceptance criteria:**
-- ~18-20 new tests across 3 files
-- Tests pass with `cd pi-de && npx vitest run`
-- 100% line coverage on initStorage.ts, >80% on SpawnModal.tsx
+- On mobile (coarse pointer), Enter in textarea inserts newline, does NOT submit
+- On desktop, Enter still submits (existing behavior unchanged)
+- Shift+Enter behavior unchanged on all platforms
+- Send button works on mobile to submit the prompt
+- Cleanup function properly removes listeners
+- Tests: mock `matchMedia`, verify Enter behavior on mobile vs desktop, verify cleanup
+- Tests pass with `cd pi-de && npm test`

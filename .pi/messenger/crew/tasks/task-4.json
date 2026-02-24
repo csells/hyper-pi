@@ -1,13 +1,11 @@
 {
   "id": "task-4",
-  "title": "Live pi agent lifecycle integration tests",
-  "status": "done",
-  "depends_on": [],
-  "created_at": "2026-02-23T14:52:04.375Z",
-  "updated_at": "2026-02-23T15:02:32.571Z",
-  "attempt_count": 1,
-  "started_at": "2026-02-23T14:54:24.217Z",
-  "base_commit": "40ee37d9371b82261831838033a31f1137cd7f0e",
-  "completed_at": "2026-02-23T15:02:32.571Z",
-  "summary": "Created pi-agent-helpers.ts with startPiAgent/stopPiAgent/waitForNode/createTempCwd helpers using tmux sessions. Created lifecycle.test.ts with 4 tests: agent registers on startup, deregisters on /quit, two agents in same cwd both register, proxy returns init_state for live agent. All pass (22s total). Fixed macOS /var → /private/var symlink issue with realpathSync."
+  "title": "Pi-DE infinite scroll client with history prepending",
+  "status": "todo",
+  "depends_on": [
+    "task-3"
+  ],
+  "created_at": "2026-02-24T01:11:41.309Z",
+  "updated_at": "2026-02-24T01:11:41.311Z",
+  "attempt_count": 0
 }
