@@ -8,6 +8,8 @@
 ---
 [2026-02-23T14:07:42.902Z] Re-plan: Implement ALL waves (1-5) from the synthesis in parallel. Each task should be independently executable. Group by file to avoid conflicts. Key files: pi-de/src/useHypivisor.ts, pi-de/src/useAgent.ts, pi-de/src/RemoteAgent.ts, pi-de/src/rpc.ts, pi-de/src/SpawnModal.tsx, pi-socket/src/history.ts, pi-socket/src/safety.ts, hypivisor/src/main.rs, hypivisor/src/state.rs, hypivisor/src/auth.rs. Each task MUST include tests. The multi-agent-per-directory constraint is sacred: NEVER deduplicate by cwd. Read AGENTS.md before implementing anything.
 
+[2026-02-24T03:14:29.967Z] Re-plan: Focus on Pi-DE frontend features first (F1-F6), leave F7 (PID cross-component change) for last. Each task should be independently implementable and testable. Keep tasks small — one feature per task.
+
 ## Run: 2026-02-23T14:07:42.902Z — specs/review-full-synthesis.md
 
 ### Pass 1 (14:11)
@@ -764,3 +766,30 @@ Dependencies: none
   }
 ]
 ```
+
+---
+## Run: 2026-02-24T03:14:29.967Z — PRD.md
+
+### Pass 1 (03:24)
+The task plan is complete. Here's the summary:
+
+## Task Execution Plan
+
+| Wave | Tasks | Description |
+|------|-------|-------------|
+| **Wave 1** | Tasks 1, 2, 3 | PID field (cross-component), Theming (new hook + CSS), Stage improvements (header/offline/scroll) — all independent |
+| **Wave 2** | Task 4 | Roster grouping (depends on Tasks 1 & 3 for PID type + `isAgentStreaming` state) |
+
+**Critical path: 2 waves**
+
+### Task dependency graph:
+```
+Task 1 (PID)  ──────┐
+Task 2 (Theming)     │ (independent)
+Task 3 (Stage)  ─────┼──→ Task 4 (Roster)
+```
+
+### Key design decisions:
+- **F2 (working/idle indicator) split across Tasks 3 & 4**: Task 3 adds `isAgentStreaming` to `useAgent` + stage dot + CSS animation. Task 4 uses it for roster card dot.
+- **No standalone types/config task**: Task 1 owns the full PID stack (protocol → pi-socket → hypivisor). Task 3 owns the `useAgent` streaming state addition alongside its real UI work.
+- **File conflict minimization**: Tasks 1 (protocol/backend), 2 (hook + CSS vars), and 3 (stage section) touch non-overlapping file sections. Task 4 waits for both 1 and 3 to serialize App.tsx roster changes.

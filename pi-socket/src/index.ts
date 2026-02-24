@@ -263,6 +263,7 @@ export default function piSocket(pi: ExtensionAPI) {
           cwd: process.cwd(),
           port,
           status: "active",
+          pid: process.pid,
         },
       };
       ws.send(JSON.stringify(rpc));

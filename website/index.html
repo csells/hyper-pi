@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>hyper-pi — The hypervisor for AI coding agents</title>
+<meta name="description" content="Extensible, model-agnostic agent orchestration. Code runs inside the agent. Multi-project. Multi-machine. Open source.">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0d1117;
+  --bg-light: #161b22;
+  --card: #21262d;
+  --green: #3fb950;
+  --green-dim: #238636;
+  --green-glow: rgba(63, 185, 80, 0.15);
+  --blue: #58a6ff;
+  --purple: #bc8cff;
+  --orange: #d29922;
+  --red: #f85149;
+  --white: #e6edf3;
+  --gray: #8b949e;
+  --gray-light: #c9d1d9;
+  --mono: 'JetBrains Mono', monospace;
+  --serif: 'Source Serif 4', Georgia, serif;
+}
+
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--bg);
+  color: var(--white);
+  font-family: var(--serif);
+  line-height: 1.6;
+  overflow-x: hidden;
+}
+
+/* ---- GRAIN OVERLAY ---- */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0; left: 0; width: 100%; height: 100%;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 9999;
+}
+
+a { color: var(--blue); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* ---- HERO ---- */
+.hero {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 2rem;
+  max-width: 900px;
+  margin: 0 auto;
+  position: relative;
+}
+
+.hero-eyebrow {
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  color: var(--gray);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 1.5rem;
+  opacity: 0;
+  animation: fadeUp 0.6s ease 0.2s forwards;
+}
+
+.hero h1 {
+  font-family: var(--mono);
+  font-size: clamp(3rem, 8vw, 5.5rem);
+  font-weight: 800;
+  color: var(--green);
+  line-height: 1.05;
+  margin-bottom: 1.5rem;
+  opacity: 0;
+  animation: fadeUp 0.6s ease 0.4s forwards;
+}
+
+.hero-subtitle {
+  font-size: clamp(1.2rem, 2.5vw, 1.6rem);
+  color: var(--gray-light);
+  max-width: 650px;
+  margin-bottom: 2.5rem;
+  opacity: 0;
+  animation: fadeUp 0.6s ease 0.6s forwards;
+}
+
+.hero-subtitle em {
+  color: var(--white);
+  font-style: italic;
+}
+
+.hero-cta {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  opacity: 0;
+  animation: fadeUp 0.6s ease 0.8s forwards;
+}
+
+.btn {
+  font-family: var(--mono);
+  font-size: 0.9rem;
+  font-weight: 700;
+  padding: 0.8rem 1.8rem;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-decoration: none;
+  display: inline-block;
+}
+
+.btn-primary {
+  background: var(--green);
+  color: var(--bg);
+}
+.btn-primary:hover { background: #4cd964; text-decoration: none; box-shadow: 0 0 24px var(--green-glow); }
+
+.btn-secondary {
+  background: transparent;
+  color: var(--gray-light);
+  border: 1px solid var(--gray);
+}
+.btn-secondary:hover { border-color: var(--gray-light); color: var(--white); text-decoration: none; }
+
+/* ---- NOT ANOTHER WRAPPER ---- */
+.differentiator {
+  padding: 6rem 2rem;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.diff-headline {
+  font-family: var(--serif);
+  font-size: clamp(1.8rem, 4vw, 2.6rem);
+  font-weight: 700;
+  color: var(--white);
+  margin-bottom: 1.5rem;
+  line-height: 1.2;
+}
+
+.diff-headline span { color: var(--orange); }
+
+.diff-body {
+  font-size: 1.1rem;
+  color: var(--gray-light);
+  max-width: 700px;
+  margin-bottom: 3rem;
+}
+
+.diff-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.2rem;
+}
+
+@media (max-width: 640px) {
+  .diff-grid { grid-template-columns: 1fr; }
+}
+
+.diff-card {
+  background: var(--card);
+  border-left: 3px solid var(--green);
+  padding: 1.5rem;
+  border-radius: 4px;
+  transition: border-color 0.3s, transform 0.2s;
+}
+.diff-card:hover { transform: translateY(-2px); }
+.diff-card:nth-child(2) { border-left-color: var(--blue); }
+.diff-card:nth-child(3) { border-left-color: var(--purple); }
+.diff-card:nth-child(4) { border-left-color: var(--orange); }
+
+.diff-card h3 {
+  font-family: var(--mono);
+  font-size: 0.95rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+.diff-card:nth-child(1) h3 { color: var(--green); }
+.diff-card:nth-child(2) h3 { color: var(--blue); }
+.diff-card:nth-child(3) h3 { color: var(--purple); }
+.diff-card:nth-child(4) h3 { color: var(--orange); }
+
+.diff-card p {
+  font-size: 0.9rem;
+  color: var(--gray);
+  line-height: 1.5;
+}
+
+/* ---- THE STACK ---- */
+.stack-section {
+  padding: 5rem 2rem;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.stack-title {
+  font-family: var(--serif);
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: var(--gray);
+  margin-bottom: 2.5rem;
+}
+
+.stack-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+  padding-bottom: 2rem;
+  border-bottom: 1px solid rgba(139, 148, 158, 0.15);
+}
+.stack-item:last-child { border-bottom: none; }
+
+.stack-name {
+  font-family: var(--mono);
+  font-size: 1.3rem;
+  font-weight: 700;
+  white-space: nowrap;
+  min-width: 160px;
+}
+
+.stack-desc {
+  color: var(--gray-light);
+  font-size: 1rem;
+}
+
+.stack-desc .tag {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0.15rem 0.5rem;
+  border-radius: 3px;
+  margin-left: 0.5rem;
+  vertical-align: middle;
+}
+
+.tag-oss { background: rgba(63, 185, 80, 0.15); color: var(--green); }
+.tag-wip { background: rgba(210, 153, 34, 0.15); color: var(--orange); }
+
+/* ---- SCREENSHOT SECTION ---- */
+.screenshots {
+  padding: 4rem 2rem;
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+.screenshots h2 {
+  font-family: var(--serif);
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: var(--gray);
+  margin-bottom: 0.5rem;
+}
+
+.screenshots .caption {
+  color: var(--gray);
+  font-size: 0.95rem;
+  margin-bottom: 2rem;
+}
+
+.screenshot-container {
+  background: var(--card);
+  border: 1px solid rgba(63, 185, 80, 0.2);
+  border-radius: 8px;
+  padding: 0.5rem;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+}
+
+.screenshot-container img {
+  width: 100%;
+  border-radius: 4px;
+  display: block;
+}
+
+/* ---- CTA / WAITLIST ---- */
+.waitlist {
+  padding: 6rem 2rem;
+  max-width: 700px;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.waitlist h2 {
+  font-family: var(--serif);
+  font-size: clamp(1.6rem, 3vw, 2.2rem);
+  font-weight: 700;
+  color: var(--white);
+  margin-bottom: 0.8rem;
+}
+
+.waitlist p {
+  color: var(--gray);
+  font-size: 1.05rem;
+  margin-bottom: 2rem;
+}
+
+.email-form {
+  display: flex;
+  gap: 0.5rem;
+  max-width: 460px;
+  margin: 0 auto 1.5rem;
+}
+
+.email-form input {
+  flex: 1;
+  font-family: var(--mono);
+  font-size: 0.9rem;
+  padding: 0.8rem 1rem;
+  background: var(--card);
+  border: 1px solid var(--gray);
+  border-radius: 6px;
+  color: var(--white);
+  outline: none;
+}
+.email-form input:focus { border-color: var(--green); }
+
+.email-form button {
+  font-family: var(--mono);
+  font-weight: 700;
+  font-size: 0.9rem;
+  padding: 0.8rem 1.5rem;
+  background: var(--green);
+  color: var(--bg);
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.2s;
+  white-space: nowrap;
+}
+.email-form button:hover { background: #4cd964; }
+
+.waitlist .note {
+  font-size: 0.8rem;
+  color: var(--gray);
+}
+
+/* ---- FOOTER ---- */
+footer {
+  padding: 3rem 2rem;
+  text-align: center;
+  border-top: 1px solid rgba(139, 148, 158, 0.1);
+}
+
+footer .logo {
+  font-family: var(--mono);
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: var(--green-dim);
+  margin-bottom: 0.5rem;
+}
+
+footer .links {
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  color: var(--gray);
+}
+
+footer .links a { color: var(--gray); margin: 0 0.8rem; }
+footer .links a:hover { color: var(--white); }
+
+/* ---- ANIMATIONS ---- */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+</style>
+</head>
+<body>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-eyebrow">Open source · Model-agnostic · Extensible</div>
+  <h1>hyper-pi</h1>
+  <p class="hero-subtitle">
+    The hypervisor for AI coding agents. Not a wrapper around your terminal — <em>an operating system for agent swarms</em>.
+  </p>
+  <div class="hero-cta">
+    <a href="https://github.com/nichochar/picoagent" class="btn btn-primary">★ Star on GitHub</a>
+    <a href="#waitlist" class="btn btn-secondary">Get notified for hosted</a>
+  </div>
+</section>
+
+<!-- DIFFERENTIATOR -->
+<section class="differentiator">
+  <h2 class="diff-headline">There are a dozen tools for <span>monitoring</span> your agents.<br>This one <span>runs inside</span> them.</h2>
+  <p class="diff-body">
+    Most "agent dashboards" are wrappers around tmux sessions. They watch from the outside. Hyper-pi extensions run in the agent runtime itself — messenger, crew coordination, stuck detection, task lifecycle, unlimited context. The community builds new capabilities that the agents actually use, not just display.
+  </p>
+  <div class="diff-grid">
+    <div class="diff-card">
+      <h3>Code Inside the Agent</h3>
+      <p>Extensions execute in the pi agent runtime. Build new agent behaviors, not just new UI panels. Messenger, crew, task lifecycle — all extensions.</p>
+    </div>
+    <div class="diff-card">
+      <h3>Unlimited Context (RLM)</h3>
+      <p>Every other agent compacts at 200K tokens and forgets. Pi's RLM gives agents essentially unlimited context. Better decisions across entire sessions.</p>
+    </div>
+    <div class="diff-card">
+      <h3>Model-Agnostic</h3>
+      <p>Claude Code, Codex, Gemini CLI — pi dispatches to all of them. The orchestration layer doesn't care who's thinking.</p>
+    </div>
+    <div class="diff-card">
+      <h3>Multi-Machine</h3>
+      <p>Not just multi-agent. Multi-project, multi-machine. Scale out your agentic coding across infrastructure, not just up within one session.</p>
+    </div>
+  </div>
+</section>
+
+<!-- THE STACK -->
+<section class="stack-section">
+  <h2 class="stack-title">The stack</h2>
+
+  <div class="stack-item">
+    <div class="stack-name" style="color: var(--green);">pi</div>
+    <div class="stack-desc">
+      The agent. Open source, absurdly extensible. A growing community building extensions the vendors can't.
+      <span class="tag tag-oss">OSS</span>
+      <br><a href="https://pi.dev" style="font-family: var(--mono); font-size: 0.85rem;">pi.dev →</a>
+    </div>
+  </div>
+
+  <div class="stack-item">
+    <div class="stack-name" style="color: var(--blue);">pi-messenger</div>
+    <div class="stack-desc">
+      Agent-to-agent communication. Crew messages, task handoffs, stuck detection with automatic reassignment. Agents coordinate without you in the loop.
+      <span class="tag tag-oss">OSS</span>
+    </div>
+  </div>
+
+  <div class="stack-item">
+    <div class="stack-name" style="color: var(--purple);">hyper-pi</div>
+    <div class="stack-desc">
+      The orchestration layer. Multi-agent, multi-project, multi-machine. Going open source.
+      <span class="tag tag-wip">WIP</span>
+      <br><a href="https://hyperpi.dev" style="font-family: var(--mono); font-size: 0.85rem;">hyperpi.dev →</a>
+    </div>
+  </div>
+
+  <div class="stack-item">
+    <div class="stack-name" style="color: var(--orange);">pi-de</div>
+    <div class="stack-desc">
+      The interface. Web, phone, CLI. The glass you look through. Access the swarm from anywhere.
+      <span class="tag tag-wip">WIP</span>
+    </div>
+  </div>
+</section>
+
+<!-- SCREENSHOT -->
+<section class="screenshots" id="demo">
+  <h2>Already running</h2>
+  <p class="caption">6 tasks, 4 agents, autonomous reassignment. You were idle for an hour.</p>
+  <div class="screenshot-container">
+    <img src="messenger.png" alt="Pi-messenger showing a 4-agent swarm completing 6 tasks autonomously" loading="lazy">
+  </div>
+</section>
+
+<!-- WAITLIST -->
+<section class="waitlist" id="waitlist">
+  <h2>Hosted hyper-pi is coming</h2>
+  <p>Multi-machine agent orchestration in the cloud. Drop your email — we'll let you know when it's ready.</p>
+  <div class="email-form">
+    <input type="email" placeholder="you@example.com" aria-label="Email address">
+    <button type="button">Notify me</button>
+  </div>
+  <p class="note">No spam. Just a single email when hosted launches.</p>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="logo">hyper-pi</div>
+  <div class="links">
+    <a href="https://github.com/nichochar/picoagent">GitHub</a>
+    <a href="https://pi.dev">pi.dev</a>
+    <a href="https://hyperpi.dev">hyperpi.dev</a>
+  </div>
+</footer>
+
+</body>
+</html>

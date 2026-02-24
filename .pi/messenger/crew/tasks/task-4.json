@@ -1,23 +1,12 @@
 {
   "id": "task-4",
-  "title": "Pi-DE infinite scroll client with history prepending",
-  "status": "done",
+  "title": "Roster grouping by project with PID display and working indicator",
+  "status": "todo",
   "depends_on": [
+    "task-1",
     "task-3"
   ],
-  "created_at": "2026-02-24T01:11:41.309Z",
-  "updated_at": "2026-02-24T01:23:23.974Z",
-  "attempt_count": 2,
-  "started_at": "2026-02-24T01:22:22.857Z",
-  "base_commit": "30f13c0820f68b11f3084c9f864e76f43ce8abcc",
-  "completed_at": "2026-02-24T01:23:23.974Z",
-  "summary": "Implemented infinite scroll client with history prepending. Added FetchHistoryRequest and HistoryPageResponse protocol types; implemented RemoteAgent.fetchHistory() and history_page handler with pagination state management; added useAgent hooks for loading state and cursor tracking; implemented scroll detection with debouncing and scroll position restoration; styled loading indicator. All 94 tests passing.",
-  "evidence": {
-    "commits": [
-      "7aaab495a56c4a3a2f57a26d063f6e0fe58c7e71"
-    ],
-    "tests": [
-      "npm test — 94 tests passing, 9 test files"
-    ]
-  }
+  "created_at": "2026-02-24T03:24:39.382Z",
+  "updated_at": "2026-02-24T03:24:39.382Z",
+  "attempt_count": 0
 }

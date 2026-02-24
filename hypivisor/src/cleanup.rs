@@ -85,6 +85,7 @@ mod tests {
                 status: NodeStatus::Active,
                 offline_since: None,
                 last_seen: Some(Utc::now().timestamp()),
+                pid: None,
             },
         );
         cleanup_stale_nodes(&cx, &reg);
@@ -106,6 +107,7 @@ mod tests {
                 status: NodeStatus::Active,
                 offline_since: None,
                 last_seen: None,
+                pid: None,
             },
         );
         cleanup_stale_nodes(&cx, &reg);
@@ -126,6 +128,7 @@ mod tests {
                 status: NodeStatus::Active,
                 offline_since: None,
                 last_seen: Some(Utc::now().timestamp() - 200), // well past 3×TTL
+                pid: None,
             },
         );
         cleanup_stale_nodes(&cx, &reg);
@@ -146,6 +149,7 @@ mod tests {
                 status: NodeStatus::Offline,
                 offline_since: Some(Utc::now().timestamp()),
                 last_seen: None,
+                pid: None,
             },
         );
         cleanup_stale_nodes(&cx, &reg);
@@ -166,6 +170,7 @@ mod tests {
                 status: NodeStatus::Offline,
                 offline_since: Some(Utc::now().timestamp() - 120),
                 last_seen: None,
+                pid: None,
             },
         );
         cleanup_stale_nodes(&cx, &reg);
@@ -186,6 +191,7 @@ mod tests {
                 status: NodeStatus::Offline,
                 offline_since: Some(Utc::now().timestamp() - 120),
                 last_seen: None,
+                pid: None,
             },
         );
 

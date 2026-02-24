@@ -1,21 +1,12 @@
 {
   "id": "task-2",
-  "title": "Mobile virtual keyboard Enter-key behavior",
-  "status": "done",
+  "title": "Theming system — dark, light, and system modes with persistence",
+  "status": "in_progress",
   "depends_on": [],
-  "created_at": "2026-02-24T01:11:41.308Z",
-  "updated_at": "2026-02-24T01:15:48.165Z",
+  "created_at": "2026-02-24T03:24:01.838Z",
+  "updated_at": "2026-02-24T03:24:53.954Z",
   "attempt_count": 1,
-  "started_at": "2026-02-24T01:12:31.513Z",
-  "base_commit": "fab098a3e6ad8be686d116236a06670dd5740435",
-  "completed_at": "2026-02-24T01:15:48.165Z",
-  "summary": "Implemented mobile virtual keyboard Enter-key behavior patch for Pi-DE. Mobile devices (detected via coarse pointer or touchstart) now insert newlines on Enter instead of submitting. Desktop behavior unchanged. Send button handles submission on mobile. Integration with App.tsx completed with proper cleanup in useEffect.",
-  "evidence": {
-    "commits": [
-      "b52ab3b"
-    ],
-    "tests": [
-      "npm test patchMobileKeyboard.test.ts — 13 tests passing"
-    ]
-  }
+  "started_at": "2026-02-24T03:24:53.936Z",
+  "base_commit": "b97d20aac4ae1a79ffdcc63812cb605c1b520f25",
+  "assigned_to": "RedQuartz"
 }

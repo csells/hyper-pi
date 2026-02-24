@@ -1,21 +1,12 @@
 {
   "id": "task-1",
-  "title": "Responsive mobile layout with roster-to-chat navigation",
-  "status": "done",
+  "title": "PID field across protocol, pi-socket, and hypivisor",
+  "status": "in_progress",
   "depends_on": [],
-  "created_at": "2026-02-24T01:11:41.306Z",
-  "updated_at": "2026-02-24T01:18:28.630Z",
-  "attempt_count": 1,
-  "started_at": "2026-02-24T01:12:27.818Z",
-  "base_commit": "fab098a3e6ad8be686d116236a06670dd5740435",
-  "completed_at": "2026-02-24T01:18:28.630Z",
-  "summary": "Implemented responsive mobile layout with roster-to-chat navigation:\n- Added agent-selected className toggle to pi-de-layout based on activeNode state\n- Implemented back button (← Back) in stage-header that clears activeNode selection\n- Styled .back-button as touch-friendly 44px target with hover/active states\n- Added desktop media query to hide back-button on viewports >767px\n- Verified existing CSS media queries for roster/chat visibility toggling\n- Integrated patchMobileKeyboard from task-2 with proper cleanup in useEffect\n- Created comprehensive App.test.tsx with 11 tests for all acceptance criteria\n- All 83 tests passing (including existing tests + new tests)\n- Satisfies R-UI-3: Mobile-first responsive layout requirement",
-  "evidence": {
-    "commits": [
-      "30f13c0820f68b11f3084c9f864e76f43ce8abcc"
-    ],
-    "tests": [
-      "pi-de npm test: 83 passed (9 test files)"
-    ]
-  }
+  "created_at": "2026-02-24T03:23:46.075Z",
+  "updated_at": "2026-02-24T03:24:55.104Z",
+  "attempt_count": 2,
+  "started_at": "2026-02-24T03:24:55.086Z",
+  "base_commit": "b97d20aac4ae1a79ffdcc63812cb605c1b520f25",
+  "assigned_to": "VividRaven"
 }

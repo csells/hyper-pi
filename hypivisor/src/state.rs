@@ -26,6 +26,10 @@ pub struct NodeInfo {
     /// Used by cleanup to detect "active" ghosts with dead TCP connections.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_seen: Option<i64>,
+    /// System process ID of the pi agent.
+    /// Set during registration, used for debugging and process management.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pid: Option<u32>,
 }
 
 pub struct AppState {

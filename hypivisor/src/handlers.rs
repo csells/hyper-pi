@@ -245,6 +245,7 @@ mod tests {
             status,
             offline_since: None,
             last_seen: Some(Utc::now().timestamp()),
+            pid: None,
         }
     }
 

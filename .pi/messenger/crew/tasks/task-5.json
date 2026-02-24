@@ -1,18 +1,9 @@
 {
   "id": "task-5",
-  "title": "Cloudflare tunnel setup documentation",
-  "status": "done",
+  "title": "F7: Add PID field to protocol, pi-socket, and hypivisor",
+  "status": "todo",
   "depends_on": [],
-  "created_at": "2026-02-24T01:11:41.310Z",
-  "updated_at": "2026-02-24T01:16:16.923Z",
-  "attempt_count": 1,
-  "started_at": "2026-02-24T01:15:58.438Z",
-  "base_commit": "b52ab3bcd54cf7217efba6ec52e0f3ebf93006ae",
-  "completed_at": "2026-02-24T01:16:16.923Z",
-  "summary": "Created comprehensive Cloudflare tunnel setup documentation covering quick tunnel setup, named tunnel configuration, Pi-DE configuration for HTTPS access, security requirements with HYPI_TOKEN, WebSocket support, and mobile testing workflow. Includes example config.yml and troubleshooting section.",
-  "evidence": {
-    "commits": [
-      "30f13c0"
-    ]
-  }
+  "created_at": "2026-02-24T03:25:10.895Z",
+  "updated_at": "2026-02-24T03:25:10.895Z",
+  "attempt_count": 0
 }

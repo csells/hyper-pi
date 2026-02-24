@@ -11,6 +11,19 @@
   --danger: #ef4444;
 }
 
+/* Light mode color overrides */
+.pi-de-light {
+  --bg-dark: #f8fafc;
+  --bg-panel: #ffffff;
+  --bg-panel-hover: #f1f5f9;
+  --text-main: #1e293b;
+  --text-muted: #64748b;
+  --accent: #059669;
+  --accent-glow: rgba(5, 150, 105, 0.3);
+  --border-color: #e2e8f0;
+  --danger: #dc2626;
+}
+
 /* Global box-sizing — scoped to pi-de layout elements to avoid
    conflicting with pi-web-ui's Tailwind base layer. */
 .pi-de-layout,
@@ -192,6 +205,32 @@ body {
 .btn-spawn:disabled {
   opacity: 0.3;
   cursor: not-allowed;
+}
+
+/* ── Theme Toggle Button ──────────────────────────────────── */
+.theme-toggle {
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-main);
+  padding: 0.4rem 0.6rem;
+  cursor: pointer;
+  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  min-width: 32px;
+  transition: all 0.2s ease;
+}
+
+.theme-toggle:hover {
+  background: var(--bg-panel-hover);
+  border-color: var(--accent);
+}
+
+.theme-toggle:active {
+  background: var(--bg-dark);
 }
 
 /* ── Main Stage (Center) ───────────────────────────────────── */

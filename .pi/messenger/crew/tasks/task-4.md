@@ -1,55 +1,23 @@
-# Pi-DE infinite scroll client with history prepending
+# Roster grouping by project with PID display and working indicator
 
-Implement the client side of lazy message loading: detect scroll-to-top, send `fetch_history` requests, and prepend older messages to the conversation.
+Restructure the roster to group agents by project directory, display PID when available, and show a working/idle indicator on the selected agent's roster card.
 
 **Files to modify:**
-- `pi-de/src/RemoteAgent.ts` — Add:
-  - `fetchHistory(before: number, limit: number): void` method that sends JSON `{ type: "fetch_history", before, limit }` over the WebSocket
-  - Handle `history_page` response in `handleSocketEvent()`: prepend `messages` to `this._state.messages`, update local state
-  - Track `hasMore` and `oldestIndex` state properties
-  - Add `onHistoryPage?: (page: HistoryPageResponse) => void` callback
-- `pi-de/src/useAgent.ts` — Add:
-  - `isLoadingHistory` state, `hasMoreHistory` state
-  - `oldestIndex` ref for pagination cursor
-  - Wire `remoteAgent.onHistoryPage` to update loading/cursor state
-  - `loadOlderMessages()` function calling `remoteAgent.fetchHistory(oldestIndex, 50)`
-  - Initialize `oldestIndex` from `init_state` message count
-  - Return `{ isLoadingHistory, hasMoreHistory, loadOlderMessages }` from hook
-- `pi-de/src/App.tsx` — Add:
-  - Destructure new values from `useAgent()`
-  - `useEffect` attaching scroll listener to `agentInterfaceRef`'s `.overflow-y-auto` child
-  - When `scrollTop < 50` and `hasMoreHistory` and `!isLoadingHistory`, call `loadOlderMessages()`
-  - Show loading indicator above messages when `isLoadingHistory`
-  - After prepend, restore scroll position: save `scrollHeight` before, set `scrollTop += newScrollHeight - oldScrollHeight` after
-- `pi-de/src/App.css` — Add `.loading-history` styles (centered spinner/text above messages)
-
-**Scroll position restoration:**
-```typescript
-const container = agentInterfaceRef.current?.querySelector(".overflow-y-auto");
-const prevHeight = container.scrollHeight;
-// ... after messages prepended ...
-requestAnimationFrame(() => {
-  container.scrollTop += container.scrollHeight - prevHeight;
-});
-```
-
-**RemoteAgent history_page handling:**
-```typescript
-if (socketEvent.type === "history_page") {
-  const page = socketEvent as HistoryPageResponse;
-  this._state = { ...this._state, messages: [...page.messages, ...this._state.messages] };
-  this.onHistoryPage?.(page);
-  this.emit({ type: "agent_end", messages: this._state.messages });
-  return;
-}
-```
+- `pi-de/src/App.tsx` — Roster section (the `.node-list` div):
+  1. **Grouping (F1):** Add `useMemo` to group `nodes` by `projectName(node.cwd)` into a `Map<string, NodeInfo[]>`. Add `collapsedGroups` state (`Set<string>`) with toggle function. Render grouped: `[...groupedNodes.entries()].map(([project, projectNodes]) => <div className="project-group"><button className="project-header" onClick={toggleGroup}>...</button>{!collapsed && projectNodes.map(renderCard)}</div>)`.
+  2. **PID display (F7):** In node card metadata span, append: `{node.pid ? ` • PID: ${node.pid}` : ""}`. The `pid?: number` field is available from Task 1's protocol update.
+  3. **Working indicator in roster (F2 roster part):** On the selected agent's card, conditionally add `working` class to status dot: `<span className={`status-dot ${node.status} ${activeNode?.id === node.id && agent.isAgentStreaming ? 'working' : ''}`} />`. Uses `isAgentStreaming` from `useAgent` (added by Task 3).
+- `pi-de/src/App.css` — Add styles: `.project-group`, `.project-header` (transparent bg, flex layout, uppercase text), `.collapse-icon`, `.project-count` (badge with agent count). The `.status-dot.working` animation CSS is defined by Task 3.
+- `pi-de/src/App.test.tsx` — Update `makeNode` to optionally include `pid`. Add tests: grouping renders project headers, collapse/expand toggles, PID displays when present, working dot class applied to selected streaming agent.
 
 **Acceptance criteria:**
-- Scrolling to top triggers `fetch_history` request with correct cursor
-- Older messages prepended above existing messages
-- Scroll position preserved (no jump) after prepending
-- Loading indicator visible while fetching
-- No fetches when `hasMore` is false
-- Debouncing prevents rapid duplicate requests
-- Tests: RemoteAgent `fetchHistory()` sends correct JSON, `history_page` handling prepends, useAgent loading state, scroll detection
-- Tests pass with `cd pi-de && npm test`
+- Agents grouped by project name (last path segment of cwd)
+- Each group has collapsible header with project name and agent count
+- Groups default to expanded; clicking header toggles collapse
+- PID shows in node card metadata when present (e.g., 'localhost:8080 • PID: 12345')
+- PID absent gracefully when not available
+- Selected agent's card shows pulsing yellow dot during streaming
+- Non-selected agents keep static green/gray dots
+- All existing App.test.tsx tests pass
+- New tests pass: `cd pi-de && npm test`
+- Build succeeds: `cd pi-de && npm run build`

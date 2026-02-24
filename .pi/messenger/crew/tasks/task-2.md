@@ -1,29 +1,24 @@
-# Mobile virtual keyboard Enter-key behavior
+# Theming system — dark, light, and system modes with persistence
 
-On mobile devices, make Enter in the virtual keyboard insert a newline in the prompt textarea instead of submitting. The existing visible Send button in MessageEditor handles submission.
+Implement theme support for Pi-DE with dark mode (current default), light mode, and system preference mode, with localStorage persistence and a toggle button.
 
-**Files to create/modify:**
-- `pi-de/src/patchMobileKeyboard.ts` (new, ~60 lines) — Module that sets up mobile keyboard interception on the `<agent-interface>` element's textarea
-- `pi-de/src/patchMobileKeyboard.test.ts` (new, ~100 lines) — Tests
-- `pi-de/src/App.tsx` — Import `patchMobileKeyboard` and call it in the `useEffect` that wires the `agentInterfaceRef`, adding its cleanup to the effect return
+**Files to create:**
+- `pi-de/src/useTheme.ts` (~60 lines) — React hook: `useTheme(): { theme: Theme; resolvedTheme: "dark" | "light"; cycleTheme: () => void }`. Reads initial value from `localStorage("pi-de-theme")`, defaults to `"dark"`. For `"system"`, listens to `matchMedia("(prefers-color-scheme: dark)")`. `cycleTheme` cycles dark → light → system → dark. Returns `resolvedTheme` (actual dark/light after resolving system pref).
+- `pi-de/src/useTheme.test.ts` (~120 lines) — Tests for hook: init from localStorage, cycle order, system mode listener, resolvedTheme accuracy.
 
-**Implementation details:**
-- Mobile detection: `window.matchMedia("(pointer: coarse)").matches` as primary signal (targets touch devices). Falls back to `"ontouchstart" in window`. Export `isMobileDevice()` for testability.
-- `patchMobileKeyboard(el: HTMLElement): () => void` function:
-  1. Uses `MutationObserver` to find the `textarea` element inside the `<agent-interface>` (it renders in light DOM — `createRenderRoot() { return this; }`)
-  2. Adds a capturing `keydown` listener on the textarea
-  3. If `isMobileDevice()` and `e.key === "Enter"` and `!e.shiftKey`: call `e.stopImmediatePropagation()` to prevent MessageEditor's `handleKeyDown` from firing. The default textarea behavior (insert newline) proceeds.
-  4. Returns a cleanup function that removes the listener and disconnects the observer
-- In `App.tsx`'s existing `useEffect` (the one that sets `ai.session`), after wiring the agent: `const cleanup = patchMobileKeyboard(el); return () => { cleanup(); };`
-- The Send button in MessageEditor (onClick: this.handleSend) already works for submission.
+**Files to modify:**
+- `pi-de/src/App.css` — Add `.pi-de-light` class with light-mode CSS variable overrides: `--bg-dark: #f8fafc; --bg-panel: #ffffff; --bg-panel-hover: #f1f5f9; --text-main: #1e293b; --text-muted: #64748b; --accent: #059669; --accent-glow: rgba(5,150,105,0.3); --border-color: #e2e8f0; --danger: #dc2626;`. Add `.theme-toggle` button styles.
+- `pi-de/src/App.tsx` — Import `useTheme`. Add `const { theme, resolvedTheme, cycleTheme } = useTheme();`. Add toggle button after sidebar `<h2>`: `<button className="theme-toggle" onClick={cycleTheme}>{theme === "dark" ? "🌙" : theme === "light" ? "☀️" : "🖥️"}</button>`. Change layout div to include `pi-de-light` class when resolvedTheme is light. Change `agent-interface-container dark` to `agent-interface-container ${resolvedTheme}` (dynamic class).
 
-**Why `stopImmediatePropagation` works:** Both our capturing listener and MessageEditor's `@keydown` handler are on the same element (the textarea, in light DOM). Our listener registered via `addEventListener("keydown", fn, { capture: true })` fires before Lit's event binding. Calling `stopImmediatePropagation()` prevents MessageEditor's handler from executing.
+**Exported symbols:**
+- `useTheme.ts`: `useTheme()` hook, `Theme` type ("dark" | "light" | "system")
 
 **Acceptance criteria:**
-- On mobile (coarse pointer), Enter in textarea inserts newline, does NOT submit
-- On desktop, Enter still submits (existing behavior unchanged)
-- Shift+Enter behavior unchanged on all platforms
-- Send button works on mobile to submit the prompt
-- Cleanup function properly removes listeners
-- Tests: mock `matchMedia`, verify Enter behavior on mobile vs desktop, verify cleanup
-- Tests pass with `cd pi-de && npm test`
+- Toggle cycles dark → light → system → dark
+- Dark mode: existing appearance unchanged
+- Light mode: light backgrounds, dark text, green accent
+- System mode: follows OS via prefers-color-scheme
+- Choice persisted in localStorage key `pi-de-theme`
+- `<agent-interface>` web component correctly switches (`.dark` class toggles)
+- Tests pass: `cd pi-de && npm test`
+- Build succeeds: `cd pi-de && npm run build`

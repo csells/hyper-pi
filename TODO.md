@@ -13,7 +13,7 @@
   selected agent
 - check that Spawn works
 - why does the tool output look SO different from the tui UI?
-- theming: light, dark, system and keep it between sessions
+- theming: support all of the pi agent themes
 - need a cancel button AND a submit button during streaming responses
 - show the name of the session as well as the project
   - make it easy to name the session

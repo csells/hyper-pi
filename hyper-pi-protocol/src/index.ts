@@ -63,6 +63,7 @@ export interface NodeInfo {
   cwd: string;
   port: number;
   status: "active" | "offline";
+  pid?: number;
 }
 
 /** Hypivisor WebSocket connection status */

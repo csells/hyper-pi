@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useHypivisor } from "./useHypivisor";
 import { useAgent } from "./useAgent";
+import { useTheme } from "./useTheme";
 import SpawnModal from "./SpawnModal";
 import { patchMobileKeyboard } from "./patchMobileKeyboard";
 import type { NodeInfo } from "./types";
@@ -33,6 +34,7 @@ export default function App() {
   const { status: hvStatus, nodes, wsRef: hvWsRef } = useHypivisor(HYPIVISOR_PORT, HYPI_TOKEN);
   const [activeNode, setActiveNode] = useState<NodeInfo | null>(null);
   const agent = useAgent(activeNode);
+  const { theme, resolvedTheme, cycleTheme } = useTheme();
   const {
     isLoadingHistory,
     hasMoreHistory,
@@ -140,10 +142,13 @@ export default function App() {
     cwd.split(/[/\\]/).filter(Boolean).pop() ?? cwd;
 
   return (
-    <div className={`pi-de-layout ${activeNode ? "agent-selected" : ""}`}>
+    <div className={`pi-de-layout ${activeNode ? "agent-selected" : ""} ${resolvedTheme === "light" ? "pi-de-light" : ""}`}>
       {/* ── LEFT: Roster ─────────────────────────────────── */}
       <div className="sidebar roster-pane">
         <h2>Hyper-Pi Mesh</h2>
+        <button className="theme-toggle" onClick={cycleTheme} title="Toggle theme">
+          {theme === "dark" ? "🌙" : theme === "light" ? "☀️" : "🖥️"}
+        </button>
 
         {hvStatus !== "connected" && (
           <div className="hv-status-banner">
@@ -219,7 +224,7 @@ export default function App() {
             )}
 
             {/* pi-web-ui AgentInterface web component */}
-            <div className="agent-interface-container dark">
+            <div className={`agent-interface-container ${resolvedTheme}`}>
               <agent-interface ref={agentInterfaceRef} />
             </div>
           </>
