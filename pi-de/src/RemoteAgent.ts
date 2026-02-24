@@ -163,7 +163,8 @@ export class RemoteAgent {
   }
 
   abort(): void {
-    // Remote agents don't support abort from the web UI
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    this.ws.send(JSON.stringify({ type: "abort" }));
   }
 
   setModel(_m: Model<Api>): void {

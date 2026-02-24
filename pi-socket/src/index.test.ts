@@ -100,6 +100,7 @@ describe("pi-socket/index.ts", () => {
         getBranch: vi.fn(() => []),
       },
       isIdle: vi.fn(() => true),
+      abort: vi.fn(),
       ui: {
         notify: vi.fn(),
       },
@@ -336,6 +337,61 @@ describe("pi-socket/index.ts", () => {
       // send() should not be called because readyState is not OPEN
       // (init_state also not sent due to readyState check)
       expect(mockClient.send).not.toHaveBeenCalled();
+    });
+
+    it("calls ctx.abort() when receiving abort message", async () => {
+      piSocket(mockPi as ExtensionAPI);
+
+      const sessionStartHandlers = piEventHandlers["session_start"];
+      await sessionStartHandlers[0]({}, mockCtx);
+
+      const mockClient = { readyState: 1, send: vi.fn(), on: vi.fn() };
+      mockWssInstance.connectionHandler(mockClient);
+
+      // Get the message handler
+      let messageHandler: any = null;
+      for (const call of mockClient.on.mock.calls) {
+        if (call[0] === "message") {
+          messageHandler = call[1];
+          break;
+        }
+      }
+
+      // Send abort request
+      const abortRequest = JSON.stringify({ type: "abort" });
+      messageHandler(Buffer.from(abortRequest));
+
+      // Verify ctx.abort() was called
+      expect(mockCtx.abort).toHaveBeenCalled();
+      // Verify sendUserMessage was NOT called (abort should return early)
+      expect(mockPi.sendUserMessage).not.toHaveBeenCalled();
+    });
+
+    it("does not treat abort as a text prompt", async () => {
+      mockCtx.isIdle.mockReturnValue(true);
+      piSocket(mockPi as ExtensionAPI);
+
+      const sessionStartHandlers = piEventHandlers["session_start"];
+      await sessionStartHandlers[0]({}, mockCtx);
+
+      const mockClient = { readyState: 1, send: vi.fn(), on: vi.fn() };
+      mockWssInstance.connectionHandler(mockClient);
+
+      // Get the message handler
+      let messageHandler: any = null;
+      for (const call of mockClient.on.mock.calls) {
+        if (call[0] === "message") {
+          messageHandler = call[1];
+          break;
+        }
+      }
+
+      // Send abort message
+      const abortRequest = JSON.stringify({ type: "abort" });
+      messageHandler(Buffer.from(abortRequest));
+
+      // Verify sendUserMessage is not called
+      expect(mockPi.sendUserMessage).not.toHaveBeenCalled();
     });
   });
 

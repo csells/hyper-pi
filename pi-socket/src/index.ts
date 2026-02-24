@@ -31,7 +31,7 @@ import os from "node:os";
 import { buildInitState, getHistoryPage } from "./history.js";
 import { boundary } from "./safety.js";
 import * as log from "./log.js";
-import type { RpcRequest, FetchHistoryRequest } from "./types.js";
+import type { RpcRequest, FetchHistoryRequest, AbortRequest } from "./types.js";
 
 export default function piSocket(pi: ExtensionAPI) {
   let nodeId = process.pid.toString(); // fallback until session provides UUID
@@ -115,6 +115,13 @@ export default function piSocket(pi: ExtensionAPI) {
           if (ws.readyState === WebSocket.OPEN) {
             ws.send(safeSerialize(page));
           }
+          return;
+        }
+
+        // Handle abort requests
+        if (parsed && typeof parsed === "object" && (parsed as any).type === "abort") {
+          log.info("pi-socket", "abort requested by client");
+          ctx.abort();
           return;
         }
 

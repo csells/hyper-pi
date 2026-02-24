@@ -2,20 +2,10 @@
 
 ## End-to-End
 
-- [ ] abort/cancel + send-during-streaming: during a streaming response, the
-      MessageEditor button should conditionally show two states in the same
-      location:
-  - **empty input → square stop button**: cancels the agent's current work
-    (like the TUI stop button). Needs a new `abort` WebSocket message type in
-    the protocol, a pi-socket handler that calls `pi.abort()`, and
-    `RemoteAgent.abort()` sending it over WebSocket.
-  - **non-empty input → normal submit button**: sends the user's message as a
-    follow-up queued behind the current response (like the TUI does).
-    `patchSendDuringStreaming.ts` already enables this but currently suppresses
-    the stop button entirely by forcing `isStreaming=false` on MessageEditor.
-    The patch needs to be reworked so both states are possible.
-  - This is especially important for mobile where there's no keyboard shortcut
-    alternative — the button is the only way to cancel or send.
+- [x] abort/cancel + send-during-streaming: abort WebSocket message type added to protocol;
+      pi-socket calls ctx.abort(); RemoteAgent.abort() sends { type: 'abort' } over WebSocket.
+      MessageEditor conditionally shows stop button (empty input) or send button (typed text)
+      based on patchSendDuringStreaming.ts.
 - [ ] autocomplete for commands/skills when the user presses "/" — needs a new
       `list_commands` message type in the protocol so pi-socket can return
       available `/` commands and skills
@@ -51,11 +41,10 @@
 - [x] check that Spawn works
 - [x] why does the tool output look SO different from the tui UI?
 - [x] theming: 7 themes (dark, light, gruvbox-dark, tokyo-night, nord, solarized-dark, solarized-light) with full pi color token mapping to CSS custom properties
-- [~] need a cancel button AND a submit button during streaming responses
-      (MessageEditor now conditionally shows stop vs send based on input
-      content — empty input shows stop, typed text shows send. But
-      `RemoteAgent.abort()` is still a no-op — see abort/cancel item in
-      End-to-End section for the protocol work needed.)
+- [x] need a cancel button AND a submit button during streaming responses
+      (MessageEditor conditionally shows stop vs send based on input content —
+      empty input shows stop, typed text shows send. RemoteAgent.abort() now
+      sends abort message over WebSocket to cancel agent work.)
 - [x] show the name of the session as well as the project
   - [x] make it easy to name the session
 - [x] what are the greyed out agents for? why do I want to click on dead agents

@@ -38,6 +38,14 @@ export interface FetchHistoryRequest {
 }
 
 /**
+ * Client request to abort the current agent operation.
+ * Sent as JSON over WebSocket; server calls ctx.abort() to cancel work.
+ */
+export interface AbortRequest {
+  type: "abort";
+}
+
+/**
  * Server response to a fetch_history request.
  * Contains a slice of older messages ready to prepend to the conversation.
  */

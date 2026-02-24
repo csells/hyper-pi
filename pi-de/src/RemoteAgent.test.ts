@@ -215,6 +215,36 @@ describe("RemoteAgent", () => {
     });
   });
 
+  describe("abort", () => {
+    it("sends abort JSON when connected", () => {
+      const { ws, sent, receive } = createMockWebSocket();
+      agent.connect(ws);
+      receive({ type: "init_state", messages: [], tools: [] });
+
+      agent.abort();
+
+      expect(sent).toEqual(['{"type":"abort"}']);
+    });
+
+    it("does nothing when WebSocket is null", () => {
+      agent.abort();
+      // Should not throw
+    });
+
+    it("does nothing when WebSocket is not OPEN", () => {
+      const { ws, sent, receive } = createMockWebSocket();
+      agent.connect(ws);
+      receive({ type: "init_state", messages: [], tools: [] });
+
+      // Simulate closed connection
+      (ws as any).readyState = 3; // WebSocket.CLOSED
+
+      agent.abort();
+
+      expect(sent).toHaveLength(0);
+    });
+  });
+
   describe("subscribe", () => {
     it("emits agent_end on subscribe if messages exist", async () => {
       const { ws, receive } = createMockWebSocket();

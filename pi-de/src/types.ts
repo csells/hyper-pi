@@ -16,3 +16,8 @@ export type {
   FetchHistoryRequest,
   HistoryPageResponse,
 } from "hyper-pi-protocol";
+
+// Abort request type for canceling agent work
+export interface AbortRequest {
+  type: "abort";
+}

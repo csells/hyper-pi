@@ -8,6 +8,7 @@ export type {
   ToolInfo,
   InitStateEvent,
   FetchHistoryRequest,
+  AbortRequest,
   HistoryPageResponse,
   SocketEvent,
   RpcRequest,
