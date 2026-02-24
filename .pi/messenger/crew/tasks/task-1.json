@@ -1,12 +1,23 @@
 {
   "id": "task-1",
   "title": "PID field across protocol, pi-socket, and hypivisor",
-  "status": "in_progress",
+  "status": "done",
   "depends_on": [],
   "created_at": "2026-02-24T03:23:46.075Z",
-  "updated_at": "2026-02-24T03:24:55.104Z",
+  "updated_at": "2026-02-24T03:26:38.389Z",
   "attempt_count": 2,
   "started_at": "2026-02-24T03:24:55.086Z",
   "base_commit": "b97d20aac4ae1a79ffdcc63812cb605c1b520f25",
-  "assigned_to": "VividRaven"
+  "completed_at": "2026-02-24T03:26:38.389Z",
+  "summary": "Added PID field across protocol, pi-socket, and hypivisor. Implemented pid?: number in NodeInfo interface, pid: process.pid in register RPC params, pid: Option<u32> in Rust struct with serde skip_serializing_if, and updated 7 test helpers (handlers.rs + cleanup.rs). All builds and tests pass.",
+  "evidence": {
+    "commits": [
+      "f1f8082"
+    ],
+    "tests": [
+      "hyper-pi-protocol npm run build",
+      "pi-socket npm run build && npm test (80 tests pass)",
+      "hypivisor cargo test (109 tests pass) && cargo build"
+    ]
+  }
 }

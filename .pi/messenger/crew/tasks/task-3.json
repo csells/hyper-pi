@@ -1,9 +1,23 @@
 {
   "id": "task-3",
   "title": "Stage improvements — header, offline handling, scroll fix, and working indicator",
-  "status": "todo",
+  "status": "done",
   "depends_on": [],
   "created_at": "2026-02-24T03:24:20.926Z",
-  "updated_at": "2026-02-24T03:24:20.926Z",
-  "attempt_count": 0
+  "updated_at": "2026-02-24T03:30:41.678Z",
+  "attempt_count": 1,
+  "started_at": "2026-02-24T03:26:38.411Z",
+  "base_commit": "f1f8082fcde0bc4a65ac52f501ddddeb5767d655",
+  "completed_at": "2026-02-24T03:30:41.678Z",
+  "summary": "Implemented stage improvements: isAgentStreaming state, session name with localStorage persistence, offline view, scroll-to-bottom on selection, and working/idle status indicator. All tests pass, build succeeds.",
+  "evidence": {
+    "commits": [
+      "77e1315ac66213d5a742ae98ced78b7eafecde0f"
+    ],
+    "tests": [
+      "cd pi-de && npm test -- useAgent.test.ts",
+      "cd pi-de && npm test -- App.test.tsx",
+      "cd pi-de && npm run build"
+    ]
+  }
 }

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useHypivisor } from "./useHypivisor";
 import { useAgent } from "./useAgent";
 import { useTheme } from "./useTheme";
@@ -46,8 +46,33 @@ export default function App() {
   const agentInterfaceRef = useRef<HTMLElement | null>(null);
   const scrollHeightRef = useRef<number>(0);
   const [sessionName, setSessionName] = useState<string>("");
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
+  const projectName = (cwd: string) =>
+    cwd.split(/[\/\\]/).filter(Boolean).pop() ?? cwd;
 
+  // Group nodes by project name (last path segment of cwd)
+  const groupedNodes = useMemo(() => {
+    const groups = new Map<string, NodeInfo[]>();
+    nodes.forEach((node) => {
+      const project = projectName(node.cwd);
+      if (!groups.has(project)) {
+        groups.set(project, []);
+      }
+      groups.get(project)!.push(node);
+    });
+    return groups;
+  }, [nodes]);
+
+  const toggleGroup = (groupName: string) => {
+    const newCollapsed = new Set(collapsedGroups);
+    if (newCollapsed.has(groupName)) {
+      newCollapsed.delete(groupName);
+    } else {
+      newCollapsed.add(groupName);
+    }
+    setCollapsedGroups(newCollapsed);
+  };
 
   // Keep activeNode status in sync with roster
   useEffect(() => {
@@ -178,9 +203,6 @@ export default function App() {
     });
   }, [isLoadingHistory]);
 
-  const projectName = (cwd: string) =>
-    cwd.split(/[/\\]/).filter(Boolean).pop() ?? cwd;
-
   return (
     <div className={`pi-de-layout ${activeNode ? "agent-selected" : ""} ${resolvedTheme === "light" ? "pi-de-light" : ""}`}>
       {/* ── LEFT: Roster ─────────────────────────────────── */}
@@ -203,25 +225,44 @@ export default function App() {
           {nodes.length === 0 && (
             <p className="empty">No agents online.</p>
           )}
-          {nodes.map((node) => (
-            <button
-              key={node.id}
-              className={`node-card ${activeNode?.id === node.id ? "active" : ""} ${node.status === "offline" ? "offline" : ""}`}
-              onClick={() =>
-                node.status === "active" && setActiveNode(node)
-              }
-              disabled={node.status === "offline"}
-            >
-              <div className="node-card-header">
-                <strong>{projectName(node.cwd)}</strong>
-                <span className={`status-dot ${node.status}`} />
+          {[...groupedNodes.entries()].map(([project, projectNodes]) => {
+            const isCollapsed = collapsedGroups.has(project);
+            return (
+              <div key={project} className="project-group">
+                <button
+                  className="project-header"
+                  onClick={() => toggleGroup(project)}
+                >
+                  <span className={`collapse-icon ${isCollapsed ? "collapsed" : ""}`}>
+                    ▼
+                  </span>
+                  <span className="project-name">{project}</span>
+                  <span className="project-count">{projectNodes.length}</span>
+                </button>
+                {!isCollapsed &&
+                  projectNodes.map((node) => (
+                    <button
+                      key={node.id}
+                      className={`node-card ${activeNode?.id === node.id ? "active" : ""} ${node.status === "offline" ? "offline" : ""}`}
+                      onClick={() =>
+                        node.status === "active" && setActiveNode(node)
+                      }
+                      disabled={node.status === "offline"}
+                    >
+                      <div className="node-card-header">
+                        <strong>{projectName(node.cwd)}</strong>
+                        <span className={`status-dot ${node.status} ${activeNode?.id === node.id && isAgentStreaming ? "working" : ""}`} />
+                      </div>
+                      <span className="metadata">
+                        {node.machine}:{node.port}
+                        {node.pid ? ` • PID: ${node.pid}` : ""}
+                      </span>
+                      <span className="metadata cwd">{node.cwd}</span>
+                    </button>
+                  ))}
               </div>
-              <span className="metadata">
-                {node.machine}:{node.port}
-              </span>
-              <span className="metadata cwd">{node.cwd}</span>
-            </button>
-          ))}
+            );
+          })}
         </div>
 
         <button
