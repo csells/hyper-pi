@@ -9,6 +9,17 @@ interface UseHypivisorReturn {
   setNodes: React.Dispatch<React.SetStateAction<NodeInfo[]>>;
 }
 
+/**
+ * Build the base WebSocket URL for the hypivisor.
+ * If VITE_HYPIVISOR_URL is set (e.g. "wss://my-tunnel.trycloudflare.com"),
+ * use that directly. Otherwise fall back to ws://hostname:port.
+ */
+export function buildHypivisorWsUrl(port: number): string {
+  const envUrl = import.meta.env.VITE_HYPIVISOR_URL;
+  if (envUrl) return envUrl.replace(/\/$/, ""); // strip trailing slash
+  return `ws://${window.location.hostname}:${port}`;
+}
+
 export function useHypivisor(port: number, token: string): UseHypivisorReturn {
   const [status, setStatus] = useState<HypivisorStatus>("connecting");
   const [nodes, setNodes] = useState<NodeInfo[]>([]);
@@ -64,7 +75,7 @@ export function useHypivisor(port: number, token: string): UseHypivisorReturn {
       }
       // Reset initReceived flag for new connection
       initReceivedRef.current = false;
-      const url = `ws://${window.location.hostname}:${port}/ws${token ? `?token=${token}` : ""}`;
+      const url = `${buildHypivisorWsUrl(port)}/ws${token ? `?token=${token}` : ""}`;
       ws = new WebSocket(url);
       wsRef.current = ws;
 

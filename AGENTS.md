@@ -184,6 +184,14 @@ tab.close`.
 - Start background services with `tmux`, not `nohup` or `&` (which get killed by
   bash tool timeouts).
 
+## Verify Before Handing Off
+
+**NEVER hand a URL, feature, or change to the user without testing it yourself
+first.** Use `surf` to open the URL, take a screenshot, and check console errors
+before telling the user it works. If a service needs a tunnel, test the tunnel
+URL. If a build needs to pass, run the build. The user's time is not for
+debugging your untested output.
+
 use your own sub-agents, the codex CLI and the gemini CLI to check the project
 for best practices. make recommendations based on the consolidated review
 feedback.

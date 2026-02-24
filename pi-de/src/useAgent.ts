@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { RemoteAgent } from "./RemoteAgent";
+import { buildHypivisorWsUrl } from "./useHypivisor";
 import type { NodeInfo, AgentStatus } from "./types";
 
 interface UseAgentReturn {
@@ -80,12 +81,12 @@ export function useAgent(activeNode: NodeInfo | null): UseAgentReturn {
       }
 
       // Connect via hypivisor proxy — single port, no direct agent access needed
-      const hypivisorHost = window.location.hostname;
       const hypivisorPort = import.meta.env.VITE_HYPIVISOR_PORT || "31415";
       const token = import.meta.env.VITE_HYPI_TOKEN || "";
       const tokenParam = token ? `?token=${encodeURIComponent(token)}` : "";
+      const baseUrl = buildHypivisorWsUrl(parseInt(hypivisorPort, 10));
       const ws = new WebSocket(
-        `ws://${hypivisorHost}:${hypivisorPort}/ws/agent/${encodeURIComponent(nodeId)}${tokenParam}`,
+        `${baseUrl}/ws/agent/${encodeURIComponent(nodeId)}${tokenParam}`,
       );
       wsRef.current = ws;
 
