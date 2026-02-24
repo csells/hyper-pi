@@ -28,10 +28,12 @@ import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { WebSocketServer, WebSocket } from "ws";
 import portfinder from "portfinder";
 import os from "node:os";
+import fs from "node:fs";
+import path from "node:path";
 import { buildInitState, getHistoryPage } from "./history.js";
 import { boundary } from "./safety.js";
 import * as log from "./log.js";
-import type { RpcRequest, FetchHistoryRequest, AbortRequest, AttachFileRequest, AttachFileResponse } from "./types.js";
+import type { RpcRequest, FetchHistoryRequest, AbortRequest, ListCommandsRequest, CommandInfo, CommandsListResponse, ListFilesRequest, FileInfo, FilesListResponse, AttachFileRequest, AttachFileResponse } from "./types.js";
 
 export default function piSocket(pi: ExtensionAPI) {
   let nodeId = process.pid.toString(); // fallback until session provides UUID
@@ -122,6 +124,72 @@ export default function piSocket(pi: ExtensionAPI) {
         if (parsed && typeof parsed === "object" && (parsed as any).type === "abort") {
           log.info("pi-socket", "abort requested by client");
           ctx.abort();
+          return;
+        }
+
+        // Handle list_commands requests — returns slash commands (/, /help, /skill:xxx)
+        if (parsed && typeof parsed === "object" && (parsed as any).type === "list_commands") {
+          const slashCommands = pi.getCommands();
+          const commands: CommandInfo[] = slashCommands.map(c => ({
+            name: `/${c.name}`,
+            description: c.description ?? "",
+          }));
+          const response: CommandsListResponse = { type: "commands_list", commands };
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(safeSerialize(response));
+          }
+          return;
+        }
+
+        // Handle list_files requests
+        if (parsed && typeof parsed === "object" && (parsed as any).type === "list_files") {
+          const req = parsed as ListFilesRequest;
+          const cwd = process.cwd();
+          const targetDir = req.prefix 
+            ? path.resolve(cwd, path.dirname(req.prefix))
+            : cwd;
+          
+          // Security check: ensure targetDir is within cwd (prevent path traversal)
+          if (!targetDir.startsWith(cwd)) {
+            // Escape attempt detected - clamp to cwd
+            const response: FilesListResponse = { type: "files_list", files: [], cwd };
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(safeSerialize(response));
+            }
+            return;
+          }
+          
+          // Read directory entries safely
+          let files: FileInfo[] = [];
+          try {
+            const entries = fs.readdirSync(targetDir, { withFileTypes: true });
+            
+            // Filter and map entries
+            for (const entry of entries) {
+              // Skip hidden files (starting with .)
+              if (entry.name.startsWith(".")) {
+                continue;
+              }
+              
+              files.push({
+                path: path.relative(cwd, path.join(targetDir, entry.name)),
+                isDirectory: entry.isDirectory(),
+              });
+              
+              // Limit to ~100 entries to avoid huge payloads
+              if (files.length >= 100) {
+                break;
+              }
+            }
+          } catch {
+            // Directory doesn't exist or is unreadable - return empty array
+            files = [];
+          }
+          
+          const response: FilesListResponse = { type: "files_list", files, cwd };
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(safeSerialize(response));
+          }
           return;
         }
 

@@ -15,6 +15,7 @@ export type {
   RpcResponse,
   FetchHistoryRequest,
   HistoryPageResponse,
+  AttachFileResponse,
 } from "hyper-pi-protocol";
 
 // Abort request type for canceling agent work
@@ -29,9 +30,8 @@ export interface CommandInfo {
 }
 
 export interface FileInfo {
-  name: string;
+  path: string;        // relative to cwd
   isDirectory: boolean;
-  path: string;
 }
 
 export interface ListCommandsRequest {

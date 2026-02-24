@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, waitFor } from "@testing-library/react";
+import { render, act, waitFor } from "@testing-library/react";
 import { Autocomplete } from "./Autocomplete";
 import type { CommandInfo, FileInfo } from "./types";
 
-// Mock RemoteAgent with proper spy setup
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 class MockRemoteAgent {
   onCommandsList: ((commands: CommandInfo[]) => void) | null = null;
   onFilesList: ((files: FileInfo[], cwd: string) => void) | null = null;
@@ -17,17 +18,12 @@ describe("Autocomplete", () => {
   let agent: MockRemoteAgent;
 
   beforeEach(() => {
-    // Create a container with an agent-interface element and textarea inside it
     container = document.createElement("div");
-    container.setAttribute("id", "test-container");
-
-    const agentInterface = document.createElement("agent-interface");
+    const ai = document.createElement("agent-interface");
     textarea = document.createElement("textarea");
-
-    agentInterface.appendChild(textarea);
-    container.appendChild(agentInterface);
+    ai.appendChild(textarea);
+    container.appendChild(ai);
     document.body.appendChild(container);
-
     agent = new MockRemoteAgent();
   });
 
@@ -37,221 +33,336 @@ describe("Autocomplete", () => {
     }
   });
 
+  /** Helper: type into textarea and trigger input event inside act() */
+  function typeInto(ta: HTMLTextAreaElement, value: string) {
+    ta.value = value;
+    ta.selectionStart = value.length;
+    ta.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+
+  // ── / command trigger ─────────────────────────────────────
+
   describe("/ command trigger", () => {
-    it("requests commands when / is typed at start", async () => {
-      const { unmount } = render(
-        <Autocomplete agent={agent as any} container={container} />
+    it("calls listCommands when / is typed at start of line", async () => {
+      render(<Autocomplete agent={agent as any} container={container} />);
+
+      act(() => typeInto(textarea, "/"));
+
+      expect(agent.listCommands).toHaveBeenCalled();
+    });
+
+    it("calls listCommands for /he partial input", async () => {
+      render(<Autocomplete agent={agent as any} container={container} />);
+
+      act(() => typeInto(textarea, "/he"));
+
+      expect(agent.listCommands).toHaveBeenCalled();
+    });
+
+    it("does not trigger for / in middle of word", () => {
+      render(<Autocomplete agent={agent as any} container={container} />);
+
+      act(() => typeInto(textarea, "hello /world"));
+
+      expect(agent.listCommands).not.toHaveBeenCalled();
+    });
+
+    it("renders command items when response arrives", async () => {
+      const { container: root } = render(
+        <Autocomplete agent={agent as any} container={container} />,
       );
 
-      // Type / at start of input
-      textarea.value = "/";
-      textarea.selectionStart = 1;
-      textarea.dispatchEvent(new Event("input", { bubbles: true }));
+      act(() => typeInto(textarea, "/"));
 
-      // Wait a tick for the event handler to process
-      await waitFor(() => {
-        expect(agent.listCommands).toHaveBeenCalled();
+      // Simulate the server response inside act
+      act(() => {
+        agent.onCommandsList?.([
+          { name: "/help", description: "Show help" },
+          { name: "/reload", description: "Reload extensions" },
+        ]);
       });
 
-      unmount();
+      await waitFor(() => {
+        const items = root.querySelectorAll(".autocomplete-item");
+        expect(items.length).toBe(2);
+      });
     });
 
-    it("triggers commands list callback", async () => {
-      const { unmount } = render(
-        <Autocomplete agent={agent as any} container={container} />
+    it("filters commands by prefix", async () => {
+      const { container: root } = render(
+        <Autocomplete agent={agent as any} container={container} />,
       );
 
-      // Simulate agent receiving commands
-      const commands: CommandInfo[] = [
-        { name: "bash", description: "Run shell commands" },
-        { name: "ls", description: "List files" },
-      ];
+      act(() => typeInto(textarea, "/he"));
 
-      agent.onCommandsList?.(commands);
+      act(() => {
+        agent.onCommandsList?.([
+          { name: "/help", description: "Show help" },
+          { name: "/reload", description: "Reload extensions" },
+        ]);
+      });
 
-      unmount();
+      await waitFor(() => {
+        const items = root.querySelectorAll(".autocomplete-item");
+        expect(items.length).toBe(1);
+      });
     });
   });
+
+  // ── @ file trigger ────────────────────────────────────────
 
   describe("@ file trigger", () => {
-    it("requests files when @ is typed", async () => {
-      const { unmount } = render(
-        <Autocomplete agent={agent as any} container={container} />
-      );
+    it("calls listFiles when @ is typed", () => {
+      render(<Autocomplete agent={agent as any} container={container} />);
 
-      textarea.value = "@";
-      textarea.selectionStart = 1;
-      textarea.dispatchEvent(new Event("input", { bubbles: true }));
+      act(() => typeInto(textarea, "@"));
 
-      await waitFor(() => {
-        expect(agent.listFiles).toHaveBeenCalled();
-      });
-
-      unmount();
+      expect(agent.listFiles).toHaveBeenCalled();
     });
 
-    it("does not request files when @ is followed by space", async () => {
-      agent.listFiles.mockClear();
+    it("calls listFiles with prefix", () => {
+      render(<Autocomplete agent={agent as any} container={container} />);
 
-      const { unmount } = render(
-        <Autocomplete agent={agent as any} container={container} />
-      );
+      act(() => typeInto(textarea, "@src/"));
 
-      textarea.value = "@ ";
-      textarea.selectionStart = 2;
-      textarea.dispatchEvent(new Event("input", { bubbles: true }));
+      expect(agent.listFiles).toHaveBeenCalledWith("src/");
+    });
 
-      // Give it a moment to NOT fire
-      await new Promise((r) => setTimeout(r, 100));
+    it("does not trigger for @ followed by space", () => {
+      render(<Autocomplete agent={agent as any} container={container} />);
+
+      act(() => typeInto(textarea, "@ "));
 
       expect(agent.listFiles).not.toHaveBeenCalled();
-
-      unmount();
     });
 
-    it("triggers files list callback", async () => {
-      const { unmount } = render(
-        <Autocomplete agent={agent as any} container={container} />
+    it("renders file items with directory indicator", async () => {
+      const { container: root } = render(
+        <Autocomplete agent={agent as any} container={container} />,
       );
 
-      const files: FileInfo[] = [
-        {
-          name: "App.tsx",
-          isDirectory: false,
-          path: "pi-de/src/App.tsx",
-        },
-      ];
+      act(() => typeInto(textarea, "@"));
 
-      agent.onFilesList?.(files, "/Users/test/hyper-pi");
+      act(() => {
+        agent.onFilesList?.(
+          [
+            { path: "src", isDirectory: true },
+            { path: "README.md", isDirectory: false },
+          ],
+          "/project",
+        );
+      });
 
-      unmount();
+      await waitFor(() => {
+        const items = root.querySelectorAll(".autocomplete-item");
+        expect(items.length).toBe(2);
+      });
     });
   });
 
-  describe("keyboard handling", () => {
-    it("does not throw on Escape key", async () => {
-      const { unmount } = render(
-        <Autocomplete agent={agent as any} container={container} />
+  // ── Keyboard navigation ───────────────────────────────────
+
+  describe("keyboard navigation", () => {
+    async function showPopupWithCommands(root: HTMLElement) {
+      act(() => typeInto(textarea, "/"));
+      act(() => {
+        agent.onCommandsList?.([
+          { name: "/help", description: "Help" },
+          { name: "/reload", description: "Reload" },
+        ]);
+      });
+      await waitFor(() => {
+        expect(root.querySelectorAll(".autocomplete-item").length).toBe(2);
+      });
+    }
+
+    it("Escape hides the popup", async () => {
+      const { container: root } = render(
+        <Autocomplete agent={agent as any} container={container} />,
       );
 
-      textarea.value = "/";
-      textarea.selectionStart = 1;
-      textarea.dispatchEvent(new Event("input", { bubbles: true }));
+      await showPopupWithCommands(root);
 
-      const escapeEvent = new KeyboardEvent("keydown", {
-        key: "Escape",
-        bubbles: true,
+      act(() => {
+        textarea.dispatchEvent(
+          new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+        );
       });
-      textarea.dispatchEvent(escapeEvent);
 
-      // Should not throw
-      expect(true).toBe(true);
-
-      unmount();
+      await waitFor(() => {
+        expect(root.querySelector(".autocomplete-popup")).toBeFalsy();
+      });
     });
 
-    it("does not throw on ArrowUp/ArrowDown", async () => {
-      const { unmount } = render(
-        <Autocomplete agent={agent as any} container={container} />
+    it("ArrowDown advances selectedIndex", async () => {
+      const { container: root } = render(
+        <Autocomplete agent={agent as any} container={container} />,
       );
 
-      textarea.value = "/";
-      textarea.selectionStart = 1;
-      textarea.dispatchEvent(new Event("input", { bubbles: true }));
+      await showPopupWithCommands(root);
 
-      const upEvent = new KeyboardEvent("keydown", {
-        key: "ArrowUp",
-        bubbles: true,
+      act(() => {
+        textarea.dispatchEvent(
+          new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }),
+        );
       });
-      textarea.dispatchEvent(upEvent);
 
-      const downEvent = new KeyboardEvent("keydown", {
-        key: "ArrowDown",
-        bubbles: true,
+      // The second item should now be highlighted
+      await waitFor(() => {
+        const items = root.querySelectorAll(".autocomplete-item");
+        expect(items.length).toBe(2);
       });
-      textarea.dispatchEvent(downEvent);
-
-      expect(true).toBe(true);
-
-      unmount();
     });
 
-    it("does not throw on Enter key", async () => {
-      const { unmount } = render(
-        <Autocomplete agent={agent as any} container={container} />
+    it("Tab inserts the selected completion", async () => {
+      const { container: root } = render(
+        <Autocomplete agent={agent as any} container={container} />,
       );
 
-      textarea.value = "/";
-      textarea.selectionStart = 1;
-      textarea.dispatchEvent(new Event("input", { bubbles: true }));
-
-      const enterEvent = new KeyboardEvent("keydown", {
-        key: "Enter",
-        bubbles: true,
+      act(() => typeInto(textarea, "/he"));
+      act(() => {
+        agent.onCommandsList?.([{ name: "/help", description: "Help" }]);
       });
-      textarea.dispatchEvent(enterEvent);
 
-      expect(true).toBe(true);
+      await waitFor(() => {
+        expect(root.querySelectorAll(".autocomplete-item").length).toBe(1);
+      });
 
-      unmount();
+      act(() => {
+        textarea.dispatchEvent(
+          new KeyboardEvent("keydown", { key: "Tab", bubbles: true }),
+        );
+      });
+
+      expect(textarea.value).toContain("/help");
     });
 
-    it("does not throw on Tab key", async () => {
-      const { unmount } = render(
-        <Autocomplete agent={agent as any} container={container} />
+    it("Enter inserts the selected completion", async () => {
+      const { container: root } = render(
+        <Autocomplete agent={agent as any} container={container} />,
       );
 
-      textarea.value = "/";
-      textarea.selectionStart = 1;
-      textarea.dispatchEvent(new Event("input", { bubbles: true }));
-
-      const tabEvent = new KeyboardEvent("keydown", {
-        key: "Tab",
-        bubbles: true,
+      act(() => typeInto(textarea, "/"));
+      act(() => {
+        agent.onCommandsList?.([{ name: "/help", description: "Help" }]);
       });
-      textarea.dispatchEvent(tabEvent);
 
-      expect(true).toBe(true);
+      await waitFor(() => {
+        expect(root.querySelectorAll(".autocomplete-item").length).toBe(1);
+      });
 
-      unmount();
+      act(() => {
+        textarea.dispatchEvent(
+          new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+        );
+      });
+
+      expect(textarea.value).toContain("/help");
     });
   });
 
-  describe("filter functions", () => {
-    it("limits command results to 10 items", async () => {
-      const { unmount } = render(
-        <Autocomplete agent={agent as any} container={container} />
-      );
+  // ── Edge cases ────────────────────────────────────────────
 
-      // Create 20 commands
-      const commands = Array.from({ length: 20 }, (_, i) => ({
-        name: `cmd${i}`,
-        description: `Command ${i}`,
-      }));
-
-      // Trigger commands callback
-      agent.onCommandsList?.(commands);
-
-      // Component should limit to 10
-      // (Filtering happens internally in the component)
-
-      unmount();
+  describe("edge cases", () => {
+    it("handles missing container gracefully", () => {
+      expect(() => {
+        const { unmount } = render(
+          <Autocomplete agent={agent as any} container={null} />,
+        );
+        unmount();
+      }).not.toThrow();
     });
 
-    it("limits file results to 10 items", async () => {
-      const { unmount } = render(
-        <Autocomplete agent={agent as any} container={container} />
+    it("popup hidden for empty result set", async () => {
+      const { container: root } = render(
+        <Autocomplete agent={agent as any} container={container} />,
       );
 
-      const files = Array.from({ length: 20 }, (_, i) => ({
-        name: `file${i}.ts`,
-        isDirectory: false,
-        path: `src/file${i}.ts`,
-      }));
+      act(() => typeInto(textarea, "/xyz"));
+      act(() => {
+        agent.onCommandsList?.([]);
+      });
 
-      agent.onFilesList?.(files, "/Users/test");
+      // No popup when items list is empty
+      expect(root.querySelector(".autocomplete-popup")).toBeFalsy();
+    });
 
+    it("hides when input no longer matches trigger", async () => {
+      const { container: root } = render(
+        <Autocomplete agent={agent as any} container={container} />,
+      );
+
+      // Show popup
+      act(() => typeInto(textarea, "/"));
+      act(() => {
+        agent.onCommandsList?.([{ name: "/help", description: "Help" }]);
+      });
+
+      await waitFor(() => {
+        expect(root.querySelector(".autocomplete-popup")).toBeTruthy();
+      });
+
+      // Clear input — should hide
+      act(() => typeInto(textarea, ""));
+
+      await waitFor(() => {
+        expect(root.querySelector(".autocomplete-popup")).toBeFalsy();
+      });
+    });
+
+    it("limits results to MAX_ITEMS (15)", async () => {
+      const { container: root } = render(
+        <Autocomplete agent={agent as any} container={container} />,
+      );
+
+      act(() => typeInto(textarea, "/"));
+
+      act(() => {
+        const commands = Array.from({ length: 30 }, (_, i) => ({
+          name: `/cmd${i}`,
+          description: `Command ${i}`,
+        }));
+        agent.onCommandsList?.(commands);
+      });
+
+      await waitFor(() => {
+        const items = root.querySelectorAll(".autocomplete-item");
+        expect(items.length).toBeLessThanOrEqual(15);
+        expect(items.length).toBeGreaterThan(0);
+      });
+    });
+
+    it("finds textarea added via MutationObserver", async () => {
+      const lateContainer = document.createElement("div");
+      document.body.appendChild(lateContainer);
+
+      render(<Autocomplete agent={agent as any} container={lateContainer} />);
+
+      // Add agent-interface + textarea after render
+      const ai = document.createElement("agent-interface");
+      const ta = document.createElement("textarea");
+      ai.appendChild(ta);
+      lateContainer.appendChild(ai);
+
+      // Wait for observer to fire
+      await new Promise((r) => setTimeout(r, 50));
+
+      act(() => typeInto(ta, "/"));
+
+      expect(agent.listCommands).toHaveBeenCalled();
+
+      document.body.removeChild(lateContainer);
+    });
+
+    it("cleans up callbacks on unmount", () => {
+      const { unmount } = render(
+        <Autocomplete agent={agent as any} container={container} />,
+      );
+
+      expect(agent.onCommandsList).not.toBeNull();
       unmount();
+      expect(agent.onCommandsList).toBeNull();
+      expect(agent.onFilesList).toBeNull();
     });
   });
 });

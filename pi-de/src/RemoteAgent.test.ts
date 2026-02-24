@@ -245,6 +245,71 @@ describe("RemoteAgent", () => {
     });
   });
 
+  describe("attachFile", () => {
+    it("sends attach_file JSON with base64 content when connected", () => {
+      const { ws, sent, receive } = createMockWebSocket();
+      agent.connect(ws);
+      receive({ type: "init_state", messages: [], tools: [] });
+
+      // Create a simple text file
+      const text = "Hello, world!";
+      const buffer = new TextEncoder().encode(text);
+
+      agent.attachFile("test.txt", buffer.buffer, "text/plain");
+
+      expect(sent).toHaveLength(1);
+      const msg = JSON.parse(sent[0]);
+      expect(msg.type).toBe("attach_file");
+      expect(msg.filename).toBe("test.txt");
+      expect(msg.mimeType).toBe("text/plain");
+      expect(typeof msg.content).toBe("string"); // base64 string
+      // Verify base64 decoding works
+      const decoded = atob(msg.content);
+      expect(decoded).toBe(text);
+    });
+
+    it("sends attach_file with image data", () => {
+      const { ws, sent, receive } = createMockWebSocket();
+      agent.connect(ws);
+      receive({ type: "init_state", messages: [], tools: [] });
+
+      // Create a 1x1 pixel PNG image
+      const pngBytes = new Uint8Array([
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, // PNG signature
+      ]);
+
+      agent.attachFile("test.png", pngBytes.buffer, "image/png");
+
+      expect(sent).toHaveLength(1);
+      const msg = JSON.parse(sent[0]);
+      expect(msg.type).toBe("attach_file");
+      expect(msg.filename).toBe("test.png");
+      expect(msg.mimeType).toBe("image/png");
+      expect(typeof msg.content).toBe("string");
+    });
+
+    it("does nothing when WebSocket is null", () => {
+      const text = "test";
+      const buffer = new TextEncoder().encode(text);
+      agent.attachFile("test.txt", buffer.buffer);
+      // Should not throw
+    });
+
+    it("does nothing when WebSocket is not OPEN", () => {
+      const { ws, sent, receive } = createMockWebSocket();
+      agent.connect(ws);
+      receive({ type: "init_state", messages: [], tools: [] });
+
+      (ws as any).readyState = 3; // WebSocket.CLOSED
+
+      const text = "test";
+      const buffer = new TextEncoder().encode(text);
+      agent.attachFile("test.txt", buffer.buffer);
+
+      expect(sent).toHaveLength(0);
+    });
+  });
+
   describe("subscribe", () => {
     it("emits agent_end on subscribe if messages exist", async () => {
       const { ws, receive } = createMockWebSocket();

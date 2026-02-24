@@ -6,12 +6,12 @@
       pi-socket calls ctx.abort(); RemoteAgent.abort() sends { type: 'abort' } over WebSocket.
       MessageEditor conditionally shows stop button (empty input) or send button (typed text)
       based on patchSendDuringStreaming.ts.
-- [ ] autocomplete for commands/skills when the user presses "/" — needs a new
-      `list_commands` message type in the protocol so pi-socket can return
-      available `/` commands and skills
-- [ ] autocomplete for at-file references (`@`) — needs a new `list_files`
-      message type in the protocol so pi-socket can return file listings
-      relative to the agent's cwd
+- [x] autocomplete for commands/skills when the user presses "/" — `list_commands`
+      protocol message, pi-socket handler (returns `pi.getCommands()` slash
+      commands), Autocomplete.tsx with filtering/keyboard nav/theme-aware popup
+- [x] autocomplete for at-file references (`@`) — `list_files` protocol message,
+      pi-socket handler with directory listing + path traversal guard,
+      Autocomplete.tsx with `@prefix` trigger and directory drill-down
 - [ ] attach files (check the tmux-adapter implementation) — needs a new
       `attach_file` message type or binary frame support in the protocol
 

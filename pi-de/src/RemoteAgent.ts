@@ -23,7 +23,7 @@ import type {
   TextContent,
   UserMessage,
 } from "@mariozechner/pi-ai";
-import type { InitStateEvent, SocketEvent, Tool, HistoryPageResponse, CommandInfo, FileInfo } from "./types";
+import type { InitStateEvent, SocketEvent, Tool, HistoryPageResponse, CommandInfo, FileInfo, AttachFileResponse } from "./types";
 
 /** Minimal Model stub for display purposes (remote agent owns the real model). */
 const REMOTE_MODEL = {
@@ -57,6 +57,7 @@ export class RemoteAgent {
   onError: ((error: string) => void) | null = null;
   onCommandsList: ((commands: CommandInfo[]) => void) | null = null;
   onFilesList: ((files: FileInfo[], cwd: string) => void) | null = null;
+  onAttachFileAck: ((ack: AttachFileResponse) => void) | null = null;
 
   // Required by AgentInterface (prevents it from overriding with proxy/key defaults)
   streamFn: unknown = () => {};
@@ -186,6 +187,24 @@ export class RemoteAgent {
     this.ws.send(JSON.stringify({ type: "list_files", prefix }));
   }
 
+  /**
+   * Attach a file to the next message.
+   * Encodes the file content as base64 and sends an attach_file request.
+   */
+  attachFile(filename: string, content: ArrayBuffer, mimeType?: string): void {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    // Convert ArrayBuffer to base64
+    const bytes = new Uint8Array(content);
+    const binaryString = String.fromCharCode(...Array.from(bytes));
+    const base64 = btoa(binaryString);
+    this.ws.send(JSON.stringify({
+      type: "attach_file",
+      filename,
+      content: base64,
+      mimeType,
+    }));
+  }
+
   setModel(_m: Model<Api>): void {
     // No-op: remote agent owns its model
   }
@@ -244,6 +263,15 @@ export class RemoteAgent {
       const event = socketEvent as any;
       if (this.onFilesList && event.files && event.cwd) {
         this.onFilesList(event.files, event.cwd);
+      }
+      return;
+    }
+
+    // Handle attach_file_ack response
+    if (socketEvent.type === "attach_file_ack") {
+      const ack = socketEvent as AttachFileResponse;
+      if (this.onAttachFileAck) {
+        this.onAttachFileAck(ack);
       }
       return;
     }

@@ -2,15 +2,17 @@
  * Patch for send-during-streaming: allows users to send messages while
  * the agent is streaming (isStreaming = true).
  *
- * Two overrides:
+ * Three overrides:
  * 1. AgentInterface.sendMessage() — remove the isStreaming gate so prompt()
  *    is called even during streaming. pi-socket handles follow-ups via
  *    `pi.sendUserMessage(text, { deliverAs: "followUp" })`.
+ *    Also calls FileAttachment.sendAttachedFiles() first if files are attached.
  * 2. MessageEditor.isStreaming property — dynamically returns:
  *    - true (show stop button) when agent is streaming AND input is empty
  *    - false (show send button) when input has text
  *    This gives mobile users a stop button when idle and a send button
  *    when they've typed something, all in the same button location.
+ * 3. FileAttachment integration — before sending text, send any attached files.
  *
  * Uses MutationObserver to find elements in light DOM, same pattern as
  * patchMobileKeyboard.ts. Returns a cleanup function.
@@ -70,6 +72,13 @@ export function patchSendDuringStreaming(el: HTMLElement): () => void {
         if (editor) {
           editor.value = "";
           editor.attachments = [];
+        }
+
+        // Send attached files first (if any) before the text message
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const fileAttachmentHandle = (window as any).__fileAttachmentHandle;
+        if (fileAttachmentHandle && fileAttachmentHandle.getAttachedFileCount?.() > 0) {
+          await fileAttachmentHandle.sendAttachedFiles?.();
         }
 
         // Call prompt — RemoteAgent.prompt sends over WebSocket
