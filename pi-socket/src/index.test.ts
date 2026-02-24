@@ -186,6 +186,59 @@ describe("pi-socket/index.ts", () => {
         deliverAs: "followUp",
       });
     });
+
+    it("rejects empty messages", async () => {
+      mockCtx.isIdle.mockReturnValue(true);
+      piSocket(mockPi as ExtensionAPI);
+
+      const sessionStartHandlers = piEventHandlers["session_start"];
+      await sessionStartHandlers[0]({}, mockCtx);
+
+      const mockClient = { readyState: 1, send: vi.fn(), on: vi.fn() };
+      mockWssInstance.connectionHandler(mockClient);
+
+      const messageHandler = mockClient.on.mock.calls[0][1];
+      messageHandler(Buffer.from(""));
+
+      expect(mockPi.sendUserMessage).not.toHaveBeenCalled();
+      expect(log.warn).toHaveBeenCalledWith("pi-socket", "ignoring empty WebSocket message");
+    });
+
+    it("rejects whitespace-only messages", async () => {
+      mockCtx.isIdle.mockReturnValue(true);
+      piSocket(mockPi as ExtensionAPI);
+
+      const sessionStartHandlers = piEventHandlers["session_start"];
+      await sessionStartHandlers[0]({}, mockCtx);
+
+      const mockClient = { readyState: 1, send: vi.fn(), on: vi.fn() };
+      mockWssInstance.connectionHandler(mockClient);
+
+      const messageHandler = mockClient.on.mock.calls[0][1];
+      messageHandler(Buffer.from("   \n\t  "));
+
+      expect(mockPi.sendUserMessage).not.toHaveBeenCalled();
+      expect(log.warn).toHaveBeenCalledWith("pi-socket", "ignoring empty WebSocket message");
+    });
+
+    it("logs and suppresses errors from sendUserMessage", async () => {
+      const error = new Error("messages: at least one message is required");
+      (mockPi.sendUserMessage as ReturnType<typeof vi.fn>).mockImplementation(() => { throw error; });
+      mockCtx.isIdle.mockReturnValue(true);
+      piSocket(mockPi as ExtensionAPI);
+
+      const sessionStartHandlers = piEventHandlers["session_start"];
+      await sessionStartHandlers[0]({}, mockCtx);
+
+      const mockClient = { readyState: 1, send: vi.fn(), on: vi.fn() };
+      mockWssInstance.connectionHandler(mockClient);
+
+      const messageHandler = mockClient.on.mock.calls[0][1];
+
+      // Must not throw — error is caught and logged, never reaches pi output
+      expect(() => messageHandler(Buffer.from("valid text"))).not.toThrow();
+      expect(log.error).toHaveBeenCalledWith("sendUserMessage", error);
+    });
   });
 
   describe("init_state on client connect", () => {

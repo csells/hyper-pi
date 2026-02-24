@@ -90,10 +90,30 @@ export default function piSocket(pi: ExtensionAPI) {
 
       ws.on("message", boundary("ws.message", (data) => {
         const text = data.toString();
-        if (ctx.isIdle()) {
-          pi.sendUserMessage(text);
-        } else {
-          pi.sendUserMessage(text, { deliverAs: "followUp" });
+
+        // Reject empty/whitespace messages — sending these to pi triggers
+        // an Anthropic API call that fails with "messages: at least one
+        // message is required", and that error becomes a permanent
+        // conversation message in pi's TUI that we cannot remove.
+        if (!text.trim()) {
+          log.warn("pi-socket", "ignoring empty WebSocket message");
+          return;
+        }
+
+        // Wrap in try/catch so that ANY error from sendUserMessage is
+        // logged to our JSONL file and NEVER propagates into pi's output.
+        // pi.sendUserMessage() returns void (fire-and-forget); if it throws
+        // synchronously the error would bubble through boundary() into
+        // log.error, but we catch here with a specific boundary name for
+        // traceability.
+        try {
+          if (ctx.isIdle()) {
+            pi.sendUserMessage(text);
+          } else {
+            pi.sendUserMessage(text, { deliverAs: "followUp" });
+          }
+        } catch (err) {
+          log.error("sendUserMessage", err);
         }
       }));
 
