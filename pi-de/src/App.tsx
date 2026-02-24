@@ -50,6 +50,9 @@ export default function App() {
 
   const [showSpawnModal, setShowSpawnModal] = useState(false);
   const agentInterfaceRef = useRef<HTMLElement | null>(null);
+  // Separate state to track when the agent-interface DOM element is available
+  // (refs don't trigger re-renders, so Autocomplete needs a state-driven value)
+  const [agentInterfaceEl, setAgentInterfaceEl] = useState<HTMLElement | null>(null);
   const scrollHeightRef = useRef<number>(0);
   const [sessionName, setSessionName] = useState<string>("");
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
@@ -348,9 +351,12 @@ export default function App() {
 
                 {/* pi-web-ui AgentInterface web component */}
                 <div className={`agent-interface-container ${isDark ? "dark" : "light"}`}>
-                  <agent-interface ref={agentInterfaceRef} />
+                  <agent-interface ref={(el: HTMLElement | null) => {
+                    agentInterfaceRef.current = el;
+                    setAgentInterfaceEl(el);
+                  }} />
                   {/* Autocomplete for / commands and @ files */}
-                  <Autocomplete agent={agent.remoteAgent} container={agentInterfaceRef.current} />
+                  <Autocomplete agent={agent.remoteAgent} container={agentInterfaceEl} />
                 </div>
               </>
             )}
