@@ -53,6 +53,7 @@ describe("App", () => {
       isLoadingHistory: false,
       hasMoreHistory: true,
       loadOlderMessages: vi.fn(),
+      isAgentStreaming: false,
     });
   });
 
@@ -179,18 +180,23 @@ describe("App", () => {
     });
   });
 
-  it("stage header shows cwd of selected node", async () => {
+  it("stage header shows project name and metadata", async () => {
     render(<App />);
 
     // Select a node
     const nodeCard = screen.getByText("project1").closest("button");
     fireEvent.click(nodeCard!);
 
-    // Stage header should show the cwd in the h3
+    // Stage header should show the project name in h3
     await waitFor(() => {
-      const stageHeader = screen.getByText("Hyper-Pi Mesh").closest(".pi-de-layout")?.querySelector(".stage-header h3");
-      expect(stageHeader).toHaveTextContent("/home/user/project1");
+      const stageHeader = document.querySelector(".stage-header h3");
+      expect(stageHeader).toHaveTextContent("project1");
     });
+
+    // Should also show machine:port metadata
+    const headerMeta = document.querySelector(".header-meta");
+    expect(headerMeta?.textContent).toContain("localhost");
+    expect(headerMeta?.textContent).toContain("9000");
   });
 
   it("clicking disabled (offline) node does not select it", () => {
@@ -279,6 +285,140 @@ describe("App", () => {
     await waitFor(() => {
       const layoutDiv = screen.getByText("Hyper-Pi Mesh").closest(".pi-de-layout");
       expect(layoutDiv).toHaveClass("agent-selected");
+    });
+  });
+
+  it("initializes and persists session name in localStorage", async () => {
+    const { rerender } = render(<App />);
+
+    // Select a node
+    const nodeCard = screen.getByText("project1").closest("button");
+    fireEvent.click(nodeCard!);
+
+    // Wait for session name input to appear
+    await waitFor(() => {
+      const sessionInput = screen.getByPlaceholderText("Session name") as HTMLInputElement;
+      expect(sessionInput).toBeInTheDocument();
+      // Should default to project name
+      expect(sessionInput.value).toBe("project1");
+    });
+
+    // Change session name
+    const sessionInput = screen.getByPlaceholderText("Session name") as HTMLInputElement;
+    fireEvent.change(sessionInput, { target: { value: "My Session" } });
+
+    // Verify localStorage was updated
+    await waitFor(() => {
+      expect(localStorage.getItem("pi-de-session-node-1")).toBe("My Session");
+    });
+
+    // Deselect and reselect node
+    const backButton = screen.getByText("← Back");
+    fireEvent.click(backButton);
+
+    const nodeCard2 = screen.getByText("project1").closest("button");
+    fireEvent.click(nodeCard2!);
+
+    // Session name should be restored from localStorage
+    await waitFor(() => {
+      const restoredInput = screen.getByPlaceholderText("Session name") as HTMLInputElement;
+      expect(restoredInput.value).toBe("My Session");
+    });
+  });
+
+  it("renders offline view when agent status is offline", async () => {
+    vi.mocked(useAgentModule.useAgent).mockReturnValue({
+      status: "offline",
+      remoteAgent: {} as any,
+      historyTruncated: false,
+      sendMessage: vi.fn(),
+      isLoadingHistory: false,
+      hasMoreHistory: true,
+      loadOlderMessages: vi.fn(),
+      isAgentStreaming: false,
+    });
+
+    render(<App />);
+
+    // Select a node
+    const nodeCard = screen.getByText("project1").closest("button");
+    fireEvent.click(nodeCard!);
+
+    // Should show offline message instead of agent-interface
+    await waitFor(() => {
+      expect(screen.getByText("Agent Offline")).toBeInTheDocument();
+      expect(screen.getByText(/Last known location/)).toBeInTheDocument();
+    });
+
+    // Should show offline-stage div
+    const offlineStage = document.querySelector(".offline-stage");
+    expect(offlineStage).toBeInTheDocument();
+  });
+
+  it("renders working status dot when agent is streaming", async () => {
+    vi.mocked(useAgentModule.useAgent).mockReturnValue({
+      status: "connected",
+      remoteAgent: {} as any,
+      historyTruncated: false,
+      sendMessage: vi.fn(),
+      isLoadingHistory: false,
+      hasMoreHistory: true,
+      loadOlderMessages: vi.fn(),
+      isAgentStreaming: true,
+    });
+
+    render(<App />);
+
+    // Select a node
+    const nodeCard = screen.getByText("project1").closest("button");
+    fireEvent.click(nodeCard!);
+
+    // Should show status dot with working class
+    await waitFor(() => {
+      const stageHeader = document.querySelector(".stage-header");
+      const statusDot = stageHeader?.querySelector(".status-dot.working");
+      expect(statusDot).toBeInTheDocument();
+    });
+  });
+
+  it("renders active status dot when agent is idle", async () => {
+    vi.mocked(useAgentModule.useAgent).mockReturnValue({
+      status: "connected",
+      remoteAgent: {} as any,
+      historyTruncated: false,
+      sendMessage: vi.fn(),
+      isLoadingHistory: false,
+      hasMoreHistory: true,
+      loadOlderMessages: vi.fn(),
+      isAgentStreaming: false,
+    });
+
+    render(<App />);
+
+    // Select a node
+    const nodeCard = screen.getByText("project1").closest("button");
+    fireEvent.click(nodeCard!);
+
+    // Should show status dot with active class
+    await waitFor(() => {
+      const stageHeader = document.querySelector(".stage-header");
+      const statusDot = stageHeader?.querySelector(".status-dot.active");
+      expect(statusDot).toBeInTheDocument();
+    });
+  });
+
+  it("displays machine:port metadata in stage header", async () => {
+    render(<App />);
+
+    // Select a node
+    const nodeCard = screen.getByText("project1").closest("button");
+    fireEvent.click(nodeCard!);
+
+    // Should show metadata (machine and port in header-meta)
+    await waitFor(() => {
+      const headerMeta = document.querySelector(".header-meta");
+      expect(headerMeta?.textContent).toContain("localhost");
+      expect(headerMeta?.textContent).toContain("9000");
     });
   });
 });

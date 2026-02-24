@@ -11,6 +11,7 @@ interface UseAgentReturn {
   isLoadingHistory: boolean;
   hasMoreHistory: boolean;
   loadOlderMessages: () => void;
+  isAgentStreaming: boolean;
 }
 
 export function useAgent(activeNode: NodeInfo | null): UseAgentReturn {
@@ -18,6 +19,7 @@ export function useAgent(activeNode: NodeInfo | null): UseAgentReturn {
   const [historyTruncated, setHistoryTruncated] = useState(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [hasMoreHistory, setHasMoreHistory] = useState(true);
+  const [isAgentStreaming, setIsAgentStreaming] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
   const activeNodeRef = useRef<NodeInfo | null>(activeNode);
   const oldestIndexRef = useRef<number>(0);
@@ -26,6 +28,14 @@ export function useAgent(activeNode: NodeInfo | null): UseAgentReturn {
   useEffect(() => {
     activeNodeRef.current = activeNode;
   }, [activeNode]);
+
+  // Subscribe to remoteAgent events and update isAgentStreaming state
+  useEffect(() => {
+    const unsub = remoteAgent.subscribe(() => {
+      setIsAgentStreaming(remoteAgent.state.isStreaming);
+    });
+    return unsub;
+  }, [remoteAgent]);
 
   const handleHistoryPage = useCallback(
     (page: { hasMore: boolean; oldestIndex: number }) => {
@@ -148,5 +158,6 @@ export function useAgent(activeNode: NodeInfo | null): UseAgentReturn {
     isLoadingHistory,
     hasMoreHistory,
     loadOlderMessages,
+    isAgentStreaming,
   };
 }

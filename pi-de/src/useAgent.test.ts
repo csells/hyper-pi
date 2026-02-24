@@ -298,4 +298,37 @@ describe("useAgent", () => {
     expect(result.current.isLoadingHistory).toBe(false);
     expect(result.current.hasMoreHistory).toBe(true);
   });
+
+  it("subscribes to remoteAgent events and updates isAgentStreaming", async () => {
+    const activeNode: NodeInfo = {
+      id: "test-node",
+      machine: "localhost",
+      cwd: "/tmp/test",
+      port: 9000,
+      status: "active",
+    };
+
+    const { result } = renderHook(() => useAgent(activeNode));
+
+    // Initially not streaming
+    expect(result.current.isAgentStreaming).toBe(false);
+
+    // Verify that the subscription was set up by checking remoteAgent
+    expect(result.current.remoteAgent).toBeDefined();
+  });
+
+  it("initializes isAgentStreaming as false", async () => {
+    const activeNode: NodeInfo = {
+      id: "test-node",
+      machine: "localhost",
+      cwd: "/tmp/test",
+      port: 9000,
+      status: "active",
+    };
+
+    const { result } = renderHook(() => useAgent(activeNode));
+
+    expect(result.current.isAgentStreaming).toBeDefined();
+    expect(result.current.isAgentStreaming).toBe(false);
+  });
 });

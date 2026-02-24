@@ -39,11 +39,13 @@ export default function App() {
     isLoadingHistory,
     hasMoreHistory,
     loadOlderMessages,
+    isAgentStreaming,
   } = agent;
 
   const [showSpawnModal, setShowSpawnModal] = useState(false);
   const agentInterfaceRef = useRef<HTMLElement | null>(null);
   const scrollHeightRef = useRef<number>(0);
+  const [sessionName, setSessionName] = useState<string>("");
 
 
 
@@ -57,6 +59,24 @@ export default function App() {
       setActiveNode(updated);
     }
   }, [nodes, activeNode]);
+
+  // Initialize session name from localStorage, defaulting to project name
+  useEffect(() => {
+    if (!activeNode) {
+      setSessionName("");
+      return;
+    }
+    const storageKey = `pi-de-session-${activeNode.id}`;
+    const stored = localStorage.getItem(storageKey);
+    const defaultName = projectName(activeNode.cwd);
+    setSessionName(stored || defaultName);
+  }, [activeNode]);
+
+  // Save session name to localStorage on change
+  useEffect(() => {
+    if (!activeNode || !sessionName) return;
+    localStorage.setItem(`pi-de-session-${activeNode.id}`, sessionName);
+  }, [sessionName, activeNode]);
 
   // Wire RemoteAgent into <agent-interface> whenever agent or ref changes
   useEffect(() => {
@@ -86,6 +106,26 @@ export default function App() {
     // 3. Clears the editor
     // 4. Calls this.session.prompt(text) → RemoteAgent.prompt → ws.send
   }, [agent.remoteAgent, agent.status, activeNode]);
+
+  // Scroll to bottom when agent is selected or new messages arrive
+  useEffect(() => {
+    if (!activeNode || agent.status !== "connected") return;
+
+    // Use requestAnimationFrame to ensure DOM has settled after init_state or new messages
+    const timeoutId = setTimeout(() => {
+      requestAnimationFrame(() => {
+        const containerEl = agentInterfaceRef.current;
+        if (!containerEl) return;
+
+        const scrollableEl = containerEl.querySelector(".overflow-y-auto") as HTMLElement | null;
+        if (scrollableEl) {
+          scrollableEl.scrollTop = scrollableEl.scrollHeight;
+        }
+      });
+    }, 0);
+
+    return () => clearTimeout(timeoutId);
+  }, [activeNode?.id, agent.status]);
 
   // Set up scroll listener for infinite scroll history loading
   useEffect(() => {
@@ -199,7 +239,22 @@ export default function App() {
           <>
             <div className="stage-header">
               <button className="back-button" onClick={() => setActiveNode(null)}>← Back</button>
-              <h3>{activeNode.cwd}</h3>
+              <div className="header-info">
+                <div>
+                  <h3>{projectName(activeNode.cwd)}</h3>
+                  <input
+                    type="text"
+                    className="session-name-input"
+                    value={sessionName}
+                    onChange={(e) => setSessionName(e.target.value)}
+                    placeholder="Session name"
+                  />
+                </div>
+                <div className="header-meta">
+                  {activeNode.machine}:{activeNode.port}
+                </div>
+              </div>
+              <span className={`status-dot ${isAgentStreaming ? "working" : "active"}`} />
               {agent.status !== "connected" && (
                 <span className="agent-status">
                   {agent.status === "connecting" && "Connecting…"}
@@ -210,23 +265,33 @@ export default function App() {
               )}
             </div>
 
-            {agent.historyTruncated && (
-              <div className="truncation-notice">
-                Showing recent history (truncated)
+            {agent.status === "offline" ? (
+              <div className="offline-stage">
+                <h2>Agent Offline</h2>
+                <p>Last known location: {activeNode.cwd}</p>
+                <p>Machine: {activeNode.machine}:{activeNode.port}</p>
               </div>
-            )}
+            ) : (
+              <>
+                {agent.historyTruncated && (
+                  <div className="truncation-notice">
+                    Showing recent history (truncated)
+                  </div>
+                )}
 
-            {isLoadingHistory && (
-              <div className="loading-history">
-                <div className="spinner" />
-                <span>Loading older messages…</span>
-              </div>
-            )}
+                {isLoadingHistory && (
+                  <div className="loading-history">
+                    <div className="spinner" />
+                    <span>Loading older messages…</span>
+                  </div>
+                )}
 
-            {/* pi-web-ui AgentInterface web component */}
-            <div className={`agent-interface-container ${resolvedTheme}`}>
-              <agent-interface ref={agentInterfaceRef} />
-            </div>
+                {/* pi-web-ui AgentInterface web component */}
+                <div className={`agent-interface-container ${resolvedTheme}`}>
+                  <agent-interface ref={agentInterfaceRef} />
+                </div>
+              </>
+            )}
           </>
         ) : (
           <div className="empty-stage">
