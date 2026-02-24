@@ -60,3 +60,6 @@
       and see no content?
 - [x] show the session as working or idle with a green or yellow dot
       respectively
+- [ ] theming contrast bugs: dark themes make the Spawn Agent button unreadable
+      (dark grey on black); light themes make the SpawnModal folder selection
+      unreadable (off-white on white background)
